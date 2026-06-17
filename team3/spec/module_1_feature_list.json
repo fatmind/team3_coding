@@ -1,0 +1,119 @@
+[
+  {
+    "id": 1,
+    "description": "HTTP API — 文件读写 + 健康检查",
+    "checkpoint": [
+      "Step 1: GET /health 返回 200 + JSON {status:'ok'}",
+      "Step 2: GET /api/files/list?path=spec 返回 spec/ 目录下文件列表（数组，含文件名和类型 file/dir）",
+      "Step 3: GET /api/files/content?path=spec/app_design.md 返回 {content: string, mtime: number}",
+      "Step 4: PUT /api/files/update body={path:'spec/app_design.md', content:'...'} 写入成功返回 200，本地文件内容一致",
+      "Step 5: 路径越界访问（如 path=../../etc/passwd）返回 403"
+    ],
+    "passes": true
+  },
+  {
+    "id": 2,
+    "description": "HTTP API — 群聊发送 + modules 数据",
+    "checkpoint": [
+      "Step 1: POST /api/chat/send body={action:'to_arch', to:'arch', message:'hello'} → 200，spec/actions.jsonl 末尾新增一行合法 JSON（含 from='human', ts 为当前时间戳）",
+      "Step 2: GET /api/modules 返回 modules_progress.json 内容（modules 数组 + dependencies）",
+      "Step 3: GET /api/modules?mid=module_3 返回对应 module_3_feature_list.json 内容",
+      "Step 4: GET /api/timeline?mid=module_3 返回 module_3_progress.txt 文件纯文本内容",
+      "Step 5: mid 参数不合法或文件不存在时返回 404 + 错误信息"
+    ],
+    "passes": true
+  },
+  {
+    "id": 3,
+    "description": "Page 1 文档展示区（文件树 + preview/edit + mtime 重载）",
+    "checkpoint": [
+      "Step 1: 页面右侧渲染 spec/ 文件树，点击文件名加载内容",
+      "Step 2: 默认展示 spec/app_design.md 的 markdown preview（渲染为 HTML）",
+      "Step 3: 切换 edit 模式，显示 textarea 可编辑；点保存后调用 PUT /api/files/update，本地文件更新",
+      "Step 4: 保存后自动切回 preview 展示最新内容",
+      "Step 5: 视图获焦时对比 mtime，若文件被外部修改则自动重载内容"
+    ],
+    "passes": true
+  },
+  {
+    "id": 4,
+    "description": "Page 1 群聊对话区（消息列表 + 发送 + 角色渲染）",
+    "checkpoint": [
+      "Step 1: 页面左侧渲染群聊消息列表，数据来自 GET /api/chat/history（读 actions.jsonl）",
+      "Step 2: 消息按 from 字段区分渲染样式（human 靠右蓝色气泡、agent 靠左灰色气泡，显示角色名称，partner 定义来自 .team3-project.json）",
+      "Step 3: 输入框 + 发送按钮，默认发送给 arch；可聊天 @ 指定发送给谁，目前只支持 arch、dev、uat",
+      "Step 4: 点击发送后消息立即显示在对话区（不等 daemon 回推），同时调用 POST /api/chat/send",
+      "Step 5: 消息列表自动滚动到底部"
+    ],
+    "passes": true
+  },
+  {
+    "id": 5,
+    "description": "群聊实时推送（WebSocket 连接 daemon + 增量更新）",
+    "checkpoint": [
+      "Step 1: 页面加载时自动连接 daemon WebSocket（ws://127.0.0.1:3100）",
+      "Step 2: 收到 daemon 推送的 agent.msg 事件后，解析 payload 并增量追加到对话区",
+      "Step 3: WebSocket 断开后自动重连（指数退避），重连后拉取最新消息补齐",
+      "Step 4: 人类发送的消息由 web 自己显示，不依赖 daemon 回推（避免重复）",
+      "Step 5: daemon 连接状态指示器：在线显示绿点、断开显示红点"
+    ],
+    "passes": true
+  },
+  {
+    "id": 6,
+    "description": "Page 2 工作项关系图 + Page 3 工作过程 timeline",
+    "checkpoint": [
+      "Step 1: Page 2 展示 modules 卡片列表（名称、状态徽章、feature 进度 N/M），数据来自 GET /api/modules",
+      "Step 2: 点击 module 卡片后下方展示 feature 详情列表（id、description、passes 状态），数据来自 GET /api/modules?mid=X",
+      "Step 3: 默认选中第一个 module 并展示其详情",
+      "Step 4: Page 1 有「查看 Agent 工作」按钮，点击跳转 Page 2",
+      "Step 5: Page 3 展示 module_X_progress.txt 纯文本内容，从 Page 2 某个入口点击进入"
+    ],
+    "passes": true
+  },
+  {
+    "id": 7,
+    "description": "修复 WS 实时推送 → DOM 不更新：Daemon 正确推送 agent.msg 事件，浏览器 WS 收到后未触发 React 状态更新，刷新后才可见。根因：useDaemonSocket catch 块静默吞错，若 payload 格式与预期有任何偏差则消息被丢弃无提示；e2e 用 mock WS server 格式恰好正确，未暴露真实 daemon 协议兼容问题",
+    "checkpoint": [
+      "Step 1: useDaemonSocket 的 catch 块添加 console.error 日志，不再静默吞错；开发者可通过浏览器控制台看到具体解析失败原因",
+      "Step 2: 用真实 daemon（或忠实复刻 daemon MessageRouter 协议的测试脚本）发送 agent.msg，浏览器控制台确认收到并解析成功（无 error 日志）",
+      "Step 3: 收到 agent.msg 后，ChatPanel 消息列表 DOM 实时新增对应气泡，无需手动刷新页面",
+      "Step 4: 回归：Module 1 既有全部 e2e 通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 8,
+    "description": "首页项目列表页 + workspace 上下文切换 + dynamics 过滤",
+    "checkpoint": [
+      "Step 1: GET /api/projects 扫描项目根目录（env TEAM3_PROJECTS_DIR，默认 dynamics/ 的上级目录）下所有含 .team3-project.json 的子目录，返回项目列表（name/workspace/createdTime）；dynamics/ 自身永远被过滤排除",
+      "Step 2: POST /api/project/init body={name, parentDir} 调用已有 initWorkspace 创建新项目目录结构，返回创建结果（workspace 路径）",
+      "Step 3: / 首页展示项目列表卡片（项目名+创建时间），无项目时显示「创建项目」引导；点击项目卡片携带 workspace 参数跳转到项目工作台页面",
+      "Step 4: 项目工作台页面展示现有 Page 1 布局（群聊+文档区），从 URL 参数获取 workspace 路径，所有 API 请求携带 workspace 参数",
+      "Step 5: 所有现有文件/聊天/模块 API（files/list, files/content, files/update, chat/send, chat/history, modules, timeline）支持 workspace query 参数覆盖 getWorkspaceRoot 默认值；无 workspace 参数时保持向后兼容"
+    ],
+    "passes": true
+  },
+  {
+    "id": 9,
+    "description": "Agent 工作日志前后端对接：stdout-parser.ts（同 daemon 版逻辑）+ API 读日志文件初始化 + useDaemonSocket onAgentLog + AgentsPanel 替换 mock 为真实数据",
+    "checkpoint": [
+      "Step 1: web/src/lib/stdout-parser.ts 实现与 daemon 版相同的解析逻辑（TypeScript），单测通过",
+      "Step 2: GET /api/project/agent-logs?workspace=X&role=arch&limit=10 读 logs/<role>_<当天>.log 文件尾部，用 stdout-parser 解析返回 [{content, tone}]；文件不存在返回空数组",
+      "Step 3: useDaemonSocket 新增 onAgentLog callback 处理 {type:'agent.log'} WS 消息，AgentsPanel 通过该 callback 实时接收数据",
+      "Step 4: AgentsPanel 删除全部 mock 数据，mount 时调 API 初始化 buffer + WS 实时追加；三 agent 独立 buffer 上限 24 行"
+    ],
+    "passes": true
+  },
+  {
+    "id": 10,
+    "description": "Agent 工作日志参数调优：初始加载量增大、buffer 容量增大、截断长度加大到 500",
+    "checkpoint": [
+      "Step 1: API 初始化默认 limit 从 10 调大到 50（初始展现内容更充足）",
+      "Step 2: 前端 LOG_BUFFER_SIZE 从 24 调大到 80（各 agent 独立 buffer）",
+      "Step 3: stdout-parser 的 MAX_CONTENT_LENGTH 从 120 调大到 500（daemon 版 + web 版同步修改）",
+      "Step 4: TypeScript 编译通过 + 现有单测通过（调整测试中的 truncation 断言）"
+    ],
+    "passes": true
+  }
+]

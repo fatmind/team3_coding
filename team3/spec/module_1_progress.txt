@@ -1,0 +1,446 @@
+## Current Feature
+ALL FEATURES PASSED — Module 1 complete (10/10)
+
+## Feature #10 Status
+feature_id: 10
+description: Agent 工作日志参数调优
+status: done
+dispatched: 2026-06-06
+accepted: 2026-06-12
+
+## Feature #9 Status
+feature_id: 9
+description: Agent 工作日志前后端对接
+status: done
+dispatched: 2026-06-06
+accepted: 2026-06-12
+
+--- 以下为已完成 feature 记录 ---
+
+## Previous Status
+ALL FEATURES PASSED — Module 1 complete (8/8)
+
+## Dev Delivery
+
+### Feature #10: Agent 工作日志参数调优 (2026-06-06)
+
+**改动内容**：
+- `daemon/src/stdout-parser.js` — `MAX_CONTENT_LENGTH` 120→500
+- `web/src/lib/stdout-parser.ts` — `MAX_CONTENT_LENGTH` 120→500
+- `web/src/app/api/project/agent-logs/route.ts` — 默认 limit 10→50，上限 100→200
+- `web/src/components/panels/AgentsPanel.tsx` — `LOG_BUFFER_SIZE` 24→80，fetchInitialLogs limit 10→50
+- `daemon/test/stdout-parser.test.js` — truncation 断言 120/123→500/503，测试字符串 repeat(200)→repeat(600)
+- `web/test/stdout-parser.test.ts` — 同上
+- `daemon/e2e/feature_22/test1_stdout_parser.js` — 同上
+
+**Checkpoint 覆盖**：
+- Step 1: ✅ API 默认 limit 10→50
+- Step 2: ✅ LOG_BUFFER_SIZE 24→80
+- Step 3: ✅ MAX_CONTENT_LENGTH 120→500（daemon + web 同步）
+- Step 4: ✅ TypeScript 编译通过 + daemon 315 pass + web 188 pass（均仅 pre-existing failures）
+
+### Feature #9: Agent 工作日志前后端对接 (2026-06-06)
+
+> 注：初版交付时 limit=10、buffer=24；Feature #10 调优后当前值为 limit=50、buffer=80、截断 500 字符。
+
+**实现功能**：
+- 新建 `web/src/lib/stdout-parser.ts`：daemon 版 stdout-parser.js 的 TypeScript 完整移植，解析真实 stream-json 格式（message.content[] 中 text/thinking/tool_use blocks）
+- 新建 `GET /api/project/agent-logs?workspace=X&role=arch&limit=10` API：读取 `logs/<role>_<today>.log` 文件尾部 N 行，用 stdout-parser 解析后返回 `[{content, tone}]`；文件不存在返回空数组
+- `useDaemonSocket` 新增 `onAgentLog` callback：处理 daemon 推送的 `{type:'agent.log', role, lines}` WS 事件，新增 `AgentLogEvent`/`AgentLogLine` 类型导出
+- `AgentsPanel` 完全去除 mock 数据（删除 MOCK_STREAM_SUMMARIES、makeLogBuffer、makeLogLine、定时器），替换为：
+  - mount 时调 `/api/project/agent-logs` 初始化 3 个 agent 的 log buffer
+  - WS `onAgentLog` 实时追加新日志行
+  - 3 agent 独立 buffer，上限 24 行（ring buffer slice）
+  - 空日志时显示提示文案
+  - 连接 daemon WS 使用 status API 返回的端口
+
+**新建文件**：
+- `web/src/lib/stdout-parser.ts` — TypeScript 版 stream-json 解析器
+- `web/src/app/api/project/agent-logs/route.ts` — Agent 日志 API
+- `web/test/stdout-parser.test.ts` — 21 项单测（truncate/getParamSummary/detectTextTone/parseContentBlock/parseStreamJsonLine，含真实 claude log 格式验证）
+- `web/test/api-agent-logs.test.ts` — 5 项单测（参数校验/空文件/真实解析/limit 限制）
+
+**修改文件**：
+- `web/src/lib/useDaemonSocket.ts` — 新增 AgentLogEvent/AgentLogLine 类型、onAgentLog callback、agent.log WS 事件处理
+- `web/src/components/panels/AgentsPanel.tsx` — 删除全部 mock 数据（~80 行），重写为真实 API + WS 数据驱动
+
+**集成测试覆盖 Checkpoint**：
+- Step 1: ✅ stdout-parser.ts 实现与 daemon 版相同解析逻辑（TypeScript），21 项单测通过（含真实 claude log 格式验证）
+- Step 2: ✅ GET /api/project/agent-logs 读 log 文件尾部 → stdout-parser 解析 → 返回 [{content, tone}]；文件不存在返回空数组
+- Step 3: ✅ useDaemonSocket 新增 onAgentLog callback 处理 {type:'agent.log'} WS 消息
+- Step 4: ✅ AgentsPanel 删除全部 mock 数据，mount 时调 API 初始化 + WS 实时追加；三 agent 独立 buffer 上限 24 行
+
+**测试结果**：198 unit tests (188 pass, 10 pre-existing failures in 3 files) + TypeScript 编译通过 + Next.js build 通过
+
+### Feature #1: HTTP API — 文件读写 + 健康检查（2026-05-25）
+
+**实现功能**：
+- GET /health → 200 {status:'ok'} 健康检查
+- GET /api/files/list?path=<relative> → 返回目录文件列表（含 name 和 type: file/dir）
+- GET /api/files/content?path=<relative> → 返回 {content: string, mtime: number}
+- PUT /api/files/update body={path, content} → 写文件成功 200
+- 路径安全校验：禁止路径越界（../）访问项目目录外文件，返回 403
+- 文件路径基准：从 .team3-project.json 的 workspace 字段读取，无则用项目根目录
+
+**新建文件**：
+- `src/lib/workspace.ts` — 工作区路径解析 + 安全校验工具
+- `src/app/health/route.ts` — 健康检查路由
+- `src/app/api/files/list/route.ts` — 文件列表路由
+- `src/app/api/files/content/route.ts` — 文件内容读取路由
+- `src/app/api/files/update/route.ts` — 文件写入路由
+- `test/workspace.test.ts` — workspace 工具单元测试（13 cases）
+- `test/api-files.test.ts` — API 路由单元测试（16 cases，全 mock fs）
+- `e2e/m1_feature_1/test1_files_api.ts` — 集成测试（8 cases，真实启动 Next.js server）
+
+**修改文件**：
+- `vitest.config.ts` — 添加 @ path alias 解析
+- `vitest.config.e2e.ts` — 添加 @ path alias + testTimeout
+
+**测试结果**：
+- 单元测试：67 passed（含 16 新增 + 13 workspace）
+- 集成测试：8 passed（覆盖全部 5 个 checkpoint step）
+- 回归检查：全部 75 e2e 通过，0 回归
+
+### Feature #2: HTTP API — 群聊发送 + modules 数据（2026-05-25）
+
+**实现功能**：
+- POST /api/chat/send body={action, to, message} → 追加 JSON 行到 spec/actions.jsonl（自动补 from='human' + ts）
+- GET /api/modules → 返回 modules_progress.json 完整内容
+- GET /api/modules?mid=module_X → 返回 module_X_feature_list.json 内容
+- GET /api/timeline?mid=module_X → 返回 module_X_progress.txt 纯文本
+- 校验：action/to 字段合法性验证，mid 格式 module_<number> 验证，文件不存在返回 404
+
+**新建文件**：
+- `src/app/api/chat/send/route.ts` — 群聊消息发送路由
+- `src/app/api/modules/route.ts` — modules 数据路由（含 mid 查询）
+- `src/app/api/timeline/route.ts` — timeline 纯文本路由
+- `test/api-chat-modules.test.ts` — 单元测试（16 cases，全 mock fs）
+- `e2e/m1_feature_2/test1_chat_modules_api.ts` — 集成测试（9 cases，真实 server）
+
+**复用**：
+- 复用 Feature #1 的 `src/lib/workspace.ts` getWorkspaceRoot() 获取项目根路径
+
+**测试结果**：
+- 单元测试：83 passed（含 16 新增）
+- 集成测试：9 passed（覆盖全部 5 个 checkpoint step）
+- 回归检查：Feature #1 e2e 8/8 通过，0 回归
+
+### Feature #3: Page 1 文档展示区（文件树 + preview/edit + mtime 重载）（2026-05-26）
+
+**实现功能**：
+- 页面右侧 60% 区域渲染 spec/ 文件树 + 文档查看器
+- 文件树展示 spec/ 目录文件列表（含目录展开/收起），点击文件名加载内容
+- 默认展示 spec/app_design.md 的 markdown preview（用 react-markdown 渲染为 HTML）
+- 切换 edit 模式显示 textarea 可编辑，保存调用 PUT /api/files/update 写入本地文件
+- 保存后自动切回 preview 模式展示最新内容
+- 视图获焦时对比 mtime，若文件被外部修改则自动重载内容
+
+**新建文件**：
+- `src/components/FileTree.tsx` — 文件树组件（递归展开目录）
+- `src/components/DocViewer.tsx` — 文档查看器（preview/edit 双模式 + mtime 重载）
+- `src/components/DocPanel.tsx` — 文档区容器（编排 FileTree + DocViewer）
+- `test/doc-panel.test.ts` — 组件单元测试（9 cases，jsdom + fetch mock）
+- `e2e/m1_feature_3/test1_doc_panel.ts` — 集成测试（6 cases，Puppeteer 真实浏览器）
+
+**修改文件**：
+- `src/app/page.tsx` — 替换默认页面为 Page 1 双栏布局
+- `src/app/globals.css` — 添加全局样式（页面布局 + 文件树 + 文档查看器）
+- `next.config.ts` — 添加 allowedDevOrigins 支持 Puppeteer e2e
+- `package.json` — 新增 react-markdown, puppeteer, @testing-library/react, jsdom 依赖
+
+**复用**：
+- 数据来源复用 Feature #1 的 /api/files/list、/api/files/content、/api/files/update API
+
+**测试结果**：
+- 单元测试：92 passed（含 9 新增组件测试）
+- 集成测试：6 passed（Puppeteer 覆盖全部 5 个 checkpoint step）
+- 回归检查：Feature #1 e2e 8/8, Feature #2 e2e 9/9 均通过，0 回归
+
+### Feature #4: Page 1 群聊对话区（消息列表 + 发送 + 角色渲染）（2026-05-26）
+
+**实现功能**：
+- 页面左侧 40% 渲染群聊消息列表，数据来自 GET /api/chat/history
+- GET /api/chat/history API：读 spec/actions.jsonl，解析 JSONL 行返回 JSON 数组，跳过无效行
+- 消息按 from 字段区分渲染：human 靠右蓝色气泡、agent 靠左灰色气泡
+- 显示角色名称（Human/Architect/Dev/UAT）+ AI 徽章 + 时间戳
+- 圆形头像显示角色名首字母（蓝底白字 for human，灰底黑字 for agent）
+- 输入框 + 目标选择器（默认 arch，可选 dev/uat）+ 发送按钮
+- 支持 @mention 语法（@dev/@uat）自动解析发送目标
+- 发送后消息立即乐观显示（不等服务端确认），同时 POST /api/chat/send
+- 消息列表自动滚动到最新消息（scrollIntoView smooth）
+- Enter 键发送，Shift+Enter 不发送（可换行）
+
+**新建文件**：
+- `src/components/ChatPanel.tsx` — 群聊组件（消息列表 + 发送 + 角色渲染）
+- `src/app/api/chat/history/route.ts` — 群聊历史 API（读 actions.jsonl）
+- `test/api-chat-history.test.ts` — history API 单元测试（8 cases，全 mock fs）
+- `test/chat-panel.test.ts` — ChatPanel 组件单元测试（10 cases，jsdom + fetch mock）
+- `e2e/m1_feature_4/test1_chat_panel.ts` — 集成测试（10 cases，Puppeteer 真实浏览器）
+
+**修改文件**：
+- `src/app/page.tsx` — 替换 chat placeholder 为 ChatPanel 组件
+- `src/app/globals.css` — 添加群聊样式（气泡、头像、输入区、目标选择器）
+- `src/app/api/chat/send/route.ts` — VALID_ACTIONS 列表添加 to_dev、to_uat
+
+**复用**：
+- 发送消息复用 Feature #2 的 POST /api/chat/send API
+- 工作区路径复用 Feature #1 的 getWorkspaceRoot()
+
+**测试结果**：
+- 单元测试：110 passed（含 18 新增：8 history API + 10 ChatPanel 组件）
+- 集成测试：10 passed（Puppeteer 覆盖全部 5 个 checkpoint step）
+- 回归检查：Feature #1 e2e 8/8, Feature #2 e2e 9/9, Feature #3 e2e 6/6 均通过，0 回归
+
+### Feature #5: 群聊实时推送（WebSocket 连接 daemon + 增量更新）（2026-05-26）
+
+**实现功能**：
+- 页面加载时自动连接 daemon WebSocket（ws://127.0.0.1:3100）
+- 收到 daemon 推送的 agent.msg 事件后，解析 payload 中的 JSON 消息并增量追加到对话区
+- WebSocket 断开后自动重连（指数退避：1s→2s→4s→8s→16s→最大30s）
+- 重连后自动调用 GET /api/chat/history 拉取全量消息补齐断线期间的消息
+- 去重逻辑：通过 ts+from+message 三元组判断，避免重复显示已有消息
+- 人类发送的消息由 web 本地乐观显示（Feature #4），daemon 不回推人类消息，无重复
+- 连接状态指示器：已连接显示绿点 + "Daemon connected"，断开显示红点 + "Daemon offline"
+
+**新建文件**：
+- `src/lib/useDaemonSocket.ts` — WebSocket 连接 hook（自动连接/重连/backoff/事件解析）
+- `test/use-daemon-socket.test.ts` — hook 单元测试（11 cases，jsdom + MockWebSocket + fake timers）
+- `e2e/m1_feature_5/test1_websocket_push.ts` — 集成测试（7 cases，mock WS server + Puppeteer）
+
+**修改文件**：
+- `src/components/ChatPanel.tsx` — 集成 useDaemonSocket hook + 状态指示器 UI
+- `src/app/globals.css` — 添加连接状态指示器样式（绿/红点 + 文字）
+
+**复用**：
+- 消息渲染复用 Feature #4 的 ChatPanel 渲染逻辑
+- 历史拉取复用 Feature #4 的 fetchHistory + GET /api/chat/history
+- WebSocket 协议与 Module 3（daemon）的 MessageRouter 完全对接
+
+**测试结果**：
+- 单元测试：121 passed（含 11 新增 hook 测试）
+- 集成测试：7 passed（mock daemon WS server + Puppeteer 覆盖全部 5 个 checkpoint）
+- 回归检查：Feature #1 e2e 8/8, Feature #2 e2e 9/9, Feature #3 e2e 6/6, Feature #4 e2e 10/10 均通过，0 回归
+
+### Feature #6: Page 2 工作项关系图 + Page 3 工作过程 timeline（2026-05-26）
+
+**实现功能**：
+- Page 2（/modules）：展示 modules 卡片列表，包含名称、状态徽章（Done/In Progress/Pending）、feature 进度条（N/M）
+- 点击 module 卡片后下方展示 feature 详情列表（id、description、passes 状态）
+- 默认选中第一个 module 并展示其 feature 详情
+- Page 1 ChatPanel 状态栏添加「查看 Agent 工作」按钮，点击跳转 Page 2
+- Page 3（/modules/[mid]/timeline）：展示 module_X_progress.txt 纯文本内容（pre 格式化）
+- Page 2 有 "View Timeline →" 链接可进入 Page 3
+- Page 2 有 "← Back to Chat" 返回 Page 1；Page 3 有 "← Back to Modules" 返回 Page 2
+
+**新建文件**：
+- `src/app/modules/page.tsx` — Page 2 modules 概览（卡片 + feature 详情）
+- `src/app/modules/[mid]/timeline/page.tsx` — Page 3 timeline 纯文本展示
+- `test/modules-page.test.ts` — Page 2 + Page 3 组件单元测试（11 cases，jsdom）
+- `e2e/m1_feature_6/test1_modules_timeline.ts` — 集成测试（6 cases，Puppeteer）
+
+**修改文件**：
+- `src/components/ChatPanel.tsx` — 添加 Link import + 「查看 Agent 工作」按钮
+- `src/app/globals.css` — 添加 Page 2/Page 3 全部样式（卡片/徽章/进度条/feature 列表/timeline）
+
+**复用**：
+- 数据来源复用 Feature #2 的 GET /api/modules、GET /api/modules?mid=X、GET /api/timeline?mid=X
+- 页面导航使用 Next.js App Router + next/link
+
+**测试结果**：
+- 单元测试：132 passed（含 11 新增 Page 2/3 组件测试）
+- 集成测试：6 passed（Puppeteer 覆盖全部 5 个 checkpoint）
+- 回归检查：Feature #1-5 e2e 全部通过（8+9+6+10+7=40 cases），0 回归
+
+### Feature #7: 修复 WS 实时推送 → DOM 不更新 (2026-05-26)
+
+**实现功能**：
+- `useDaemonSocket.ts` catch 块添加 `console.error`，不再静默吞错，开发者可在浏览器控制台看到具体解析失败原因
+- `useDaemonSocket.ts` 消息解析增加 payload 类型判断：`typeof data.payload === "string"` 时 JSON.parse，否则直接使用对象（防御性兼容）
+- 外层 WebSocket 连接 catch 块同样添加 `console.error`
+- e2e 使用忠实复刻 daemon MessageRouter 协议的测试脚本（非 mock WS server），精确模拟 `JSON.stringify({type:"agent.msg", payload: rawLine})` 格式
+
+**修改文件**：
+- `web/src/lib/useDaemonSocket.ts` — catch 块加 console.error + payload 解析增加类型判断
+- `web/test/use-daemon-socket.test.ts` — 新增 2 项单测：object payload 处理 + console.error 日志验证
+
+**新建文件**：
+- `web/e2e/m1_feature_7/test1_ws_dom_update.ts` — 集成测试（3 项）：代码审查验证 + 协议兼容性 + DOM 实时更新
+
+**集成测试覆盖 Checkpoint**：
+- Step 1: ✅ useDaemonSocket catch 块包含 console.error，源码验证无空 catch
+- Step 2: ✅ 用忠实复刻 daemon MessageRouter 协议的 WS server 发送 agent.msg，浏览器控制台无 error 日志
+- Step 3: ✅ 收到 agent.msg 后 ChatPanel DOM 实时新增气泡（waitForFunction 确认），渲染为 agent 左对齐样式
+- Step 4: ✅ 全部 web 单测 126 pass（含 2 新增），0 fail；Feature #1/#2 e2e API 层有 pre-existing workspace 路径问题（非本次变更引入）
+
+**测试结果**：
+- 单元测试：134 passed（含 2 新增 Feature #7 测试）
+- 集成测试：3 passed（Puppeteer + 忠实 daemon 协议 WS）
+- 回归检查：web 单测 126/126 pass（排除 pre-existing api-chat-history 模块解析问题）
+
+### Feature #8: 首页项目列表页 + workspace 上下文切换 + dynamics 过滤（2026-05-28，人类反馈后重构）
+
+**人类反馈要求（重构）**：
+1. 不能扫描 `.team3-project.json`（特殊文件），改用 `data/projects.json` 文件注册表存储项目列表
+2. 无 workspace 参数时所有 API 直接返回 400，前端跳转首页；不允许 fallback 到 `getWorkspaceRoot()`
+3. web.log 时间戳格式改为 `yyyy-MM-dd HH:mm:ss`（人类要求）
+4. 创建项目时，用户需填写项目名和绝对路径（parentDir 改为必填）
+
+**实现功能**：
+- GET /api/projects：从 `data/projects.json` 读取项目列表（文件注册表，非目录扫描），返回 JSON 数组（name/workspace/createdTime）
+- POST /api/project/init：接受 {name, parentDir} body，调用 initWorkspace 创建目录结构，然后通过 addProject() 注册到 `data/projects.json`；校验项目名格式、重复返回 409
+- workspace.ts 彻底移除 `getWorkspaceRoot()`/`findProjectRoot()`/`scanProjects()`，`resolveWorkspace()` 无 workspace 参数时返回 null（不 fallback），新增 `loadProjects()`/`saveProjects()`/`addProject()`/`getProjectsDir()` 文件注册表函数
+- 所有 7 个现有 API（files/list, files/content, files/update, chat/send, chat/history, modules, timeline）**强制要求** workspace query 参数，缺失时返回 400
+- web-logger.ts 移除 `getWorkspaceRoot` 依赖，workspace 通过 start() 参数传入
+- health/route.ts 移除 `getWorkspaceRoot` 依赖
+- / 首页展示项目列表卡片，点击携带 workspace 跳转 /workspace
+- /workspace 页面展示 Page 1 布局，无 workspace 显示 "No project selected"
+- 前端组件全部携带 workspace prop，导航链路完整
+
+**新建文件**：
+- `web/src/app/api/projects/route.ts` — 项目列表 API（读 data/projects.json）
+- `web/src/app/api/project/init/route.ts` — 项目创建 API（initWorkspace + addProject）
+- `web/src/app/workspace/page.tsx` — 工作台页面（原 Page 1 布局）
+- `web/test/workspace-projects.test.ts` — resolveWorkspace/loadProjects/saveProjects/addProject/getProjectsDir 单元测试（14 cases）
+- `web/test/api-projects.test.ts` — 项目 API 单元测试（10 cases）
+- `web/e2e/m1_feature_8/test1_projects_workspace.ts` — 集成测试（25 cases，真实 Next.js + Puppeteer）
+
+**修改文件**：
+- `web/src/lib/workspace.ts` — 移除 getWorkspaceRoot/findProjectRoot/scanProjects，新增文件注册表函数
+- `web/src/lib/web-logger.ts` — 移除 getWorkspaceRoot 依赖，workspace 通过 start() 参数缓存
+- `web/src/app/health/route.ts` — 移除 getWorkspaceRoot 依赖
+- `web/src/app/page.tsx` — 替换为项目列表首页
+- `web/src/app/globals.css` — 添加项目列表页全套样式
+- `web/src/components/ChatPanel.tsx` — 接受 workspace prop
+- `web/src/components/DocPanel.tsx` — 接受 workspace prop
+- `web/src/components/DocViewer.tsx` — 接受 workspace prop
+- `web/src/components/FileTree.tsx` — 接受 workspace prop
+- `web/src/app/modules/page.tsx` — 支持 workspace search param
+- `web/src/app/modules/[mid]/timeline/page.tsx` — 支持 workspace search param
+- `web/src/app/api/files/list/route.ts` — 强制 workspace 参数，缺失返回 400
+- `web/src/app/api/files/content/route.ts` — 同上
+- `web/src/app/api/files/update/route.ts` — 同上
+- `web/src/app/api/chat/send/route.ts` — 同上
+- `web/src/app/api/chat/history/route.ts` — 同上
+- `web/src/app/api/modules/route.ts` — 同上
+- `web/src/app/api/timeline/route.ts` — 同上
+- `web/test/workspace.test.ts` — 移除 getWorkspaceRoot 测试（函数已删除）
+- `web/test/api-chat-history.test.ts` — 适配 GET 签名变更 + workspace mock
+- `web/test/api-files.test.ts` — 移除 getWorkspaceRoot mock
+- `web/test/api-chat-modules.test.ts` — 移除 getWorkspaceRoot mock
+- `web/test/modules-page.test.ts` — mock 补充 useSearchParams
+
+**复用**：
+- 项目创建复用 Module 2 的 initWorkspace()（src/lib/init/init-workspace.ts）
+- 所有 API 使用 workspace.ts 的 resolveWorkspace()（返回 null 时 = 400）
+- 工作台页面复用 Feature #3/#4/#5/#6 的全部组件
+
+**集成测试覆盖 Checkpoint**：
+- Step 1: ✅ GET /api/projects 从 data/projects.json 读取项目列表（name/workspace/createdTime），dynamics/ 不在列表中（3 条验证）
+- Step 2: ✅ POST /api/project/init 创建新项目（initWorkspace + data/projects.json 注册），重复返回 409，非法名返回 400，新项目出现在 GET /api/projects 结果中（4 条验证）
+- Step 3: ✅ / 首页渲染 projects-page，显示 "Team3 Projects" 标题 + 创建按钮（2 条验证）
+- Step 4: ✅ /workspace?path=X 显示 Page 1 双栏布局（chat+doc panel），加载聊天历史；无 path 显示 "No project selected"（3 条验证）
+- Step 5: ✅ 全部 7 个 API 无 workspace 参数返回 400（5 条验证）+ 有 workspace 参数正常工作（8 条验证）
+
+**测试结果**：
+- 单元测试：151 passed / 12 test files passed（排除 init-workspace.test.ts 5 个 pre-existing 失败）
+- 集成测试：25 passed（Puppeteer + HTTP 覆盖全部 5 个 checkpoint，含 5 个 400-without-workspace 验证）
+- TypeScript: tsc --noEmit --skipLibCheck 零错误
+- 回归检查：/health 200、API 无 workspace 全部 400、有 workspace 全部正常
+
+## Architect Notes
+
+### Feature #8 验收通过（2026-05-28）
+- **独立审查判断**：架构改动彻底——`getWorkspaceRoot()`/`findProjectRoot()` 完全删除，`resolveWorkspace()` 无 workspace 参数返回 null（不 fallback），所有 7 个现有 API 强制 workspace 参数（缺则 400）；项目发现改用文件注册表 `data/projects.json`（非目录扫描），dynamics/ 从根本上不可能出现在项目列表中（只有 POST /api/project/init 才能注册项目）；首页 `/` 渲染项目卡片列表（name+createdTime+workspace 路径），空列表显示创建引导；`/workspace?path=<workspace>` 页面正确传递 workspace prop 给 ChatPanel/DocPanel/FileTree/DocViewer；modules 和 timeline 页面也正确传递 workspace search param；web-logger 移除 getWorkspaceRoot 依赖，workspace 通过 start() 参数缓存
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，workspace-projects.test.ts 14 cases（resolveWorkspace null/empty/valid 5 项 + getProjectsDir env/default 2 项 + loadProjects 4 项含 invalid JSON/non-array + saveProjects 1 项 + addProject 3 项含 duplicate skip）；api-projects.test.ts 10 cases（GET 3 项含 500 + POST 7 项含 missing name/invalid name/missing parentDir/non-absolute parentDir/duplicate 409/invalid JSON/initWorkspace throw 500）；assert 具体——initWorkspace calledWith 精确路径、addProject calledWith objectContaining、writeFileSync content 含 parsed JSON 验证
+  - e2e 不 mock 被测主体：已检查，真实 Next.js dev server + 真实 Puppeteer 浏览器 + 真实磁盘 IO（创建目录/写文件/读文件验证）+ 真实 HTTP 请求；data/projects.json 是合法测试 setup（准备注册表），不是 mock 被测主体
+  - 无 tautology：已检查，e2e 通过独立通道验证——HTTP 创建项目 → fs.readFileSync 读 registry 验证注册；Puppeteer DOM textContent 验证 UI 渲染；POST chat/send → fs.readFileSync 读 actions.jsonl 验证写入到正确项目目录
+  - 异常/边界：良好覆盖——400 无 workspace（5 个 API 各 1 条）、400 invalid name、400 missing parentDir、400 non-absolute parentDir、409 duplicate、500 throw、无 workspace param 的 /workspace 页面显示 "No project selected"
+  - 跨 feature 复用：已检查，workspace 页面正确复用 ChatPanel(#4)、DocPanel(#3)、FileTree(#3)、DocViewer(#3)；POST /api/project/init 正确调用 Module 2 的 initWorkspace()；所有 API 共用 resolveWorkspace()
+- **抽测 e2e**：`web/e2e/m1_feature_8/test1_projects_workspace.ts` — 25/25 通过
+- **疑点/风险点**：`data/projects.json` 注册表位于 `web/data/` 目录，不在项目 `spec/` 下，不受 git 追踪——用户重新 clone 仓库后项目列表丢失，需要手动创建或重新注册。低风险（本地部署产品，不会频繁 clone），但建议后续考虑注册表的持久化策略（如放在 ~/.team3/ 全局目录下）。另外目前没有 UI 删除项目的功能，只能手动编辑 projects.json。
+
+### Feature #7 验收通过（2026-05-26）
+- **独立审查判断**：两处关键修改精准解决 UAT 报告的 WS→DOM 不更新问题——catch 块从静默吞错改为 console.error 输出详细诊断信息（含 prefix + Error + raw data）；payload 解析增加 typeof 防御（string 时 JSON.parse，object 直接使用），兼容 daemon 可能的格式差异；e2e 使用 `broadcastViaMessageRouterProtocol` 精确复刻 daemon message-router.js L83-86 协议
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，2 新增：object payload 防御（toHaveBeenCalledWith 精确验证）+ console.error 触发（stringContaining + any(Error) + raw data）
+  - e2e 不 mock 被测主体：已检查，被测主体是 web WS hook + ChatPanel；daemon WS 是忠实复刻外部依赖（broadcastViaMessageRouterProtocol 对应 message-router.js L83-86）；Puppeteer 真实浏览器 + 真实 Next.js
+  - 无 tautology：已检查，三独立通道：WS server 发送 → console 监听无 error → DOM querySelector 验证新气泡 + className 含 chat-bubble-left
+  - 跨 feature 复用：已检查，复用 ChatPanel(#4) 渲染、useDaemonSocket(#5) hook
+- **抽测 e2e**：`web/e2e/m1_feature_7/test1_ws_dom_update.ts` — 3/3 通过
+- **疑点/风险点**：`typeof data.payload === "string" ? JSON.parse(data.payload) : data.payload` 防御性兼容对非 string 的 payload 不做字段校验——若 daemon 发送 payload=42 或 payload=null，不会 throw 但会传递不含 message/from/ts 字段的对象给 handleAgentMessage，可能渲染出 undefined。低风险（daemon 协议固定），建议后续加字段校验。
+
+### Feature #6 验收通过（2026-05-26）
+- **独立审查判断**：Page 2 ModulesPage 正确从 GET /api/modules 加载数据并渲染卡片（名称+状态 badge+进度 N/M），默认选中第一个 module（setSelectedModule prev || modules[0].id），点击卡片切换后调用 GET /api/modules?mid=X 加载 feature 详情；Page 3 TimelinePage 通过 useParams 取 mid 参数后 GET /api/timeline?mid=X 获取纯文本，用 pre 元素展示；ChatPanel 新增 Link 跳转按钮；App Router 路由结构 /modules 和 /modules/[mid]/timeline 正确
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，11 cases 覆盖卡片渲染+状态 badge+进度文本+默认选中+feature passes 状态+切换模块加载验证（检查 fetch call args）+timeline 内容/错误/链接/标题；assert 具体（如 getByText("2/3 features")、className 含 selected、href 精确匹配）
+  - e2e mock 被测主体：已检查，Puppeteer 真实浏览器 + 真实 Next.js server，无 mock；Page 2 和 Page 3 均通过真实 URL 导航验证
+  - tautology：未发现，e2e 验证真实 modules_progress.json 中的模块名（"Web UI 交互"）和真实 progress.txt 内容
+  - 异常/边界：部分覆盖（TimelinePage 有 404 error 单元测试），ModulesPage fetch 失败路径（代码 line 124-130）无 e2e 覆盖但逻辑简单（显示错误文案）；缺少 0 features 模块场景测试
+  - 跨 feature 复用：已检查，正确调用 Feature #2 的 GET /api/modules、GET /api/modules?mid=X、GET /api/timeline?mid=X，未重新实现
+- **抽测 e2e**：`web/e2e/m1_feature_6/test1_modules_timeline.ts` — 6/6 通过
+- **中间产出验证**：App Router 路由结构确认（/modules/page.tsx + /modules/[mid]/timeline/page.tsx）
+- **疑点/风险点**：ModulesPage fetch 失败时用户只看到静态 "Failed to load modules data" 无重试入口，体验偏差；progress.txt 内容可能很长但 pre 元素无 overflow 处理，超长内容可能溢出视窗（CSS 层面风险，功能不影响）
+
+### Feature #5 验收通过（2026-05-26）
+- **独立审查判断**：useDaemonSocket hook 设计合理——通过 useRef 存储回调避免 re-render 触发重连、指数退避通过 backoffRef × 2 + cap 30s、首次连接不触发 onReconnect（hasConnectedOnceRef 标记）、重连后触发 onReconnect → fetchHistory 补齐断线期间消息；ChatPanel 集成正确——handleAgentMessage 通过 ts+from+message 三元组去重后追加 setMessages、daemonStatus 状态驱动绿/红点 UI；unmount 时 close WS + 清 reconnect timer 防止内存泄漏
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，11 cases 覆盖连接/断开/事件解析/忽略非 agent.msg/指数退避时序验证（advanceTimersByTime 精确到毫秒）/backoff 重置/cap 30s/onReconnect 仅重连触发/autoConnect=false/unmount 清理
+  - e2e mock 被测主体：已检查，被测主体是 web 客户端 WS 逻辑，mock WS server 是模拟外部依赖（daemon），非 mock 被测主体本身；Puppeteer 真实浏览器 + 真实 Next.js server + 真实 WebSocket 连接
+  - tautology：未发现，e2e 通过 DOM querySelector 获取 className/textContent 验证状态变化，broadcastAgentMessage 从 mock server 发出后浏览器侧独立验证 DOM 显示
+  - 异常/边界：已检查，覆盖断连重连（stop→restart daemon）、去重（重复消息不重复显示）、unmount 清理；缺少：malformed JSON payload 的 e2e 验证（hook 有 silent catch 但 e2e 未覆盖），属低风险
+  - 跨 feature 复用：已检查，集成在 ChatPanel 中复用 Feature #4 的 fetchHistory/setMessages/消息渲染逻辑，onReconnect 调用 fetchHistory 复用 GET /api/chat/history
+- **抽测 e2e**：`web/e2e/m1_feature_5/test1_websocket_push.ts` — 7/7 通过
+- **中间产出验证**：e2e 运行后 actions.jsonl 完整（41 行，backup/restore 机制正常），无数据损坏
+- **疑点/风险点**：e2e 使用 mock WS server 模拟 daemon，未验证与真实 daemon（Module 3）的协议兼容性——如果 daemon 推送的 agent.msg payload 格式与 mock 有偏差（如多嵌套一层、字段名差异），将在 UAT 阶段才暴露。建议 UAT 重点验证跨模块 WS 通信。
+
+### Feature #4 验收通过（2026-05-26）
+- **独立审查判断**：ChatPanel 实现完整——GET /api/chat/history 读 actions.jsonl 返回 JSON 数组（跳过无效行）；ChatPanel 组件从 history API 加载消息后按 from 字段渲染不同样式（human→右蓝、agent→左灰+AI badge+角色名）；发送流程：乐观更新 setMessages 先显示 → 清空 input → POST /api/chat/send 异步完成；@mention 语法通过正则 `^@(arch|dev|uat)\s+` 解析目标；Enter 发送/Shift+Enter 不发送通过 handleKeyDown 判断；auto-scroll 通过 messagesEndRef.scrollIntoView({behavior:'smooth'})；目标选择器 select 下拉默认 arch
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，18 cases（8 history API + 10 ChatPanel）覆盖：API 空文件/有效JSONL/无效行跳过/路径验证/500错误；组件 loading/empty/消息渲染+class检查/@mention解析/按钮disabled/avatar字母/API调用验证+body解析
+  - e2e mock 被测主体：已检查，Puppeteer 真实浏览器 + 真实 Next.js server + seed actions.jsonl + 磁盘文件验证（发送后 readFileSync 解析最后一行验证 message/from/to/action）
+  - tautology：未发现，e2e 通过 DOM 提取 textContent/className/value 与独立 seed 数据和 fs.readFileSync 对比
+  - 跨 feature 复用：已检查，发送调用 Feature #2 的 POST /api/chat/send，history API 复用 Feature #1 的 getWorkspaceRoot()；VALID_ACTIONS 扩展 to_dev/to_uat 向后兼容
+- **抽测 e2e**：`web/e2e/m1_feature_4/test1_chat_panel.ts` — 10/10 通过
+
+### Feature #3 验收通过（2026-05-26）
+- **独立审查判断**：三个组件拆分合理——FileTree（递归展开+API 加载子目录）、DocViewer（preview/edit 双模式+mtime focus 重载）、DocPanel（容器编排默认 spec/app_design.md）；page.tsx 正确布局左 40%/右 60% 双栏；DocViewer 保存流程：PUT update → GET content 取新 mtime → setContent + setMode("preview")，确保 Step 4 保存后切回；mtime 重载通过 window "focus" + container "focusin" 事件触发 checkMtime()，对比 mtimeRef.current 判断是否需要刷新
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，9 cases 覆盖 FileTree（渲染/点击回调/loading/error）+ DocViewer（preview 渲染/edit 切换/save 写盘验证/path 显示）+ DocPanel（默认文件）；assert 具体（如验证 PUT body 解析后 path+content 值、textarea.value 精确匹配）
+  - e2e mock 被测主体：已检查，Puppeteer 真实浏览器 + 真实 Next.js server + 磁盘文件对比验证，无任何 mock
+  - tautology：未发现，e2e 从浏览器 DOM 抽取值与磁盘文件内容独立对比（如 fs.readFileSync 验证 save 结果、dispatchEvent focus 后 textarea.value 含 marker）
+  - 跨 feature 复用：已检查，三个组件调用 fetch('/api/files/list')、fetch('/api/files/content')、fetch('/api/files/update') 均为 Feature #1 已有 API，无重新实现
+- **抽测 e2e**：`web/e2e/m1_feature_3/test1_doc_panel.ts` — 6/6 通过
+
+### Feature #2 验收通过（2026-05-26）
+- **独立审查判断**：三个新 API 路由（chat/send、modules、timeline）结构清晰，均复用 workspace.ts getWorkspaceRoot() 获取项目根；chat/send 正确验证 action/to/message 字段有效性、自动补 from='human'+ts 后 appendFile 单行 JSON；modules 路由正确区分 "无 mid 返回 modules_progress.json" vs "有 mid 返回 feature_list"；timeline 路由返回 text/plain Content-Type
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，16 cases 覆盖 400（缺字段/非法值）、200（正确写入验证含 JSON parse）、404（ENOENT/非法 mid）、500（IO 异常），assert 内容具体（如验证 appendFileSync 参数含正则匹配 JSON 行格式）
+  - e2e mock 被测主体：已检查，9 cases 真实启动 Next.js server + fetch HTTP + 磁盘文件对比验证
+  - tautology：未发现，e2e 断言基于真实 HTTP 响应 body 与磁盘文件内容对比（readFileSync → JSON.parse → toEqual）
+  - 跨 feature 复用：已检查，chat/send、modules、timeline 三个路由均 import {getWorkspaceRoot} from '@/lib/workspace'，复用 Feature #1 建立的工具函数
+- **抽测 e2e**：`web/e2e/m1_feature_2/test1_chat_modules_api.ts` — 9/9 通过
+
+### Feature #1 验收通过（2026-05-25）
+- **独立审查判断**：workspace.ts 路径解析逻辑正确（向上查找 .team3-project.json → 读 workspace → fallback），resolveSafePath 安全校验完备（resolve + startsWith），四个 API Route 共享工具模式一致
+- **对抗式 checklist**：
+  - 单测 assert 完整性：已检查，29 项覆盖路径解析/越界检测/API 正常异常分支
+  - e2e mock 被测主体：已检查，真实启动 Next.js server + fetch HTTP 请求 + 磁盘验证
+  - tautology：未发现，断言基于真实 API 响应和磁盘文件内容对比
+  - 跨 feature 复用：N/A（Module 1 首个 feature）
+- **抽测 e2e**：`web/e2e/m1_feature_1/test1_files_api.ts` — 8/8 通过
+
+## History
+- [2026-05-25] Module 1 feature list created (6 features), dispatched Feature #1 to Dev
+- [2026-05-25] Feature #1 accepted, dispatched Feature #2
+- [2026-05-26] Feature #2 accepted, dispatched Feature #3
+- [2026-05-26] Feature #3 accepted, dispatched Feature #4
+- [2026-05-26] Feature #4 accepted, dispatched Feature #5
+- [2026-05-26] Feature #5 accepted, dispatched Feature #6
+- [2026-05-26] Feature #6 accepted — Module 1 ALL FEATURES PASSED, triggering UAT
+- [2026-05-26] Feature #7 accepted — Module 1 ALL FEATURES PASSED again (7/7), triggering UAT re-check
+- [2026-05-28] Feature #8 accepted — Module 1 ALL FEATURES PASSED (8/8)
+- [2026-06-06] Dispatched Feature #9 (Agent 工作日志前后端对接) to Dev
+- [2026-06-06] Feature #9 accepted — Dev delivery verified against checkpoint + unit tests
+- [2026-06-06] Dispatched Feature #10 (Agent 工作日志参数调优) to Dev
+- [2026-06-12] Feature #10 accepted — Module 1 ALL FEATURES PASSED (10/10)

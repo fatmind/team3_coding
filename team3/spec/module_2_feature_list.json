@@ -1,0 +1,76 @@
+[
+  {
+    "id": 1,
+    "description": "Web 工程初始化 + initWorkspace 目录骨架函数",
+    "checkpoint": [
+      "前置要求：e2e 测试项目路径 /Users/bohan.sj/dev/open/team_coding3/example/test1/",
+      "Step 1: web/ 是有效 Next.js 工程（package.json 含 next 依赖、tsconfig.json 存在、src/ 目录存在）",
+      "Step 2: 调用 initWorkspace 后，项目路径下生成 spec/app_design.md、spec/agents/、spec/actions.jsonl、spec/decision_log.md、spec/modules_progress.json、.team3-project.json",
+      "Step 3: .team3-project.json 初始内容符合 app_design 定义的 schema（name、createdTime、workspace、init_workspace=true、partner 结构）",
+      "Step 4: 重复调用 initWorkspace 幂等（不覆盖已有文件内容）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 2,
+    "description": "Agent prompt 模板内容定义、新建项目 copy",
+    "checkpoint": [
+      "Step 1: 建立初始 agent prompt 模板 web/xxx/，包括 team3.md、arch_prompt.md、dev_prompt.md、uat_prompt.md（注：从 human_coding 拷贝、重命名）",
+      "Step 1: initWorkspace 新建某个项目时，从 web/xxx/ 拷贝所有文件到 spec/agents/",
+      "Step 2: 检查：team3.md 包含完整工作流协议（团队构成、核心文件说明、actions.jsonl schema、reread 协议）",
+      "Step 3: 检查：spec/agents/ 下 arch/dev/uat 均包含「建立项目全局认识」指令（按序读 team3.md → app_design.md → decision_log.md → modules_progress.json）",
+      "Step 4: 检查：spec/agents/ 下 arch/dev/uat 均包含 decision_log.md 写入触发条件和格式要求",
+      "Step 5: 检查：spec/agents/ 下 arch/dev/uat 均包含 actions.jsonl 写入规范（字段 action/from/to/ts/message、reread 末尾协议）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 3,
+    "description": "start daemon",
+    "checkpoint": [
+      "前置要求：不允许 mock、module 3 已开发完成，需真实启动 daemon",
+      "Step 1: startDaemon 通过 child_process 启动 daemon 进程（指向 daemon/src/daemon.js 入口）",
+      "Step 2: 启动成功后 .team3-project.json init_daemon 字段被更新为 daemon 进程 PID",
+      "Step 3: 函数内部等待 daemon WebSocket 端口就绪（连接成功收到 connected 消息）后才 resolve",
+      "Step 4: daemon 启动失败时函数 reject 并携带错误信息"
+    ],
+    "passes": true
+  },
+  {
+    "id": 4,
+    "description": "initAgents 初始化 arch + uat Agent",
+    "checkpoint": [
+      "前置要求：不允许 mock、module 3 已开发完成，需真实启动 daemon",
+      "Step 1: web/src/lib/init/init-agents.ts 导出 initAgents(workspacePath) 函数",
+      "Step 2: initAgents 通过 WebSocket 向 daemon 发送 init_agent 请求（role=arch、role=uat）",
+      "Step 3: 成功后 .team3-project.json partner.arch_agent.session.runing 和 partner.uat_agent.session.runing 均为合法 UUID v4",
+      "Step 4: spec/actions.jsonl 中出现 arch 的上线通知（action=to_human, from=arch, message 含「已在线」）",
+      "Step 5: 函数返回 { arch: { sessionId }, uat: { sessionId } } 结构"
+    ],
+    "passes": true
+  },
+  {
+    "id": 5,
+    "description": "修复 initWorkspace 模板 copy 失败：templates 目录迁移到 web/ 下 + __dirname 改 process.cwd()",
+    "checkpoint": [
+      "Step 1: dynamics/templates/ 整体迁移到 dynamics/web/templates/（agent/ 和 uat/ 子目录保持不变）",
+      "Step 2: getTemplatesDir() 改用 path.join(process.cwd(), 'templates')，不再使用 __dirname",
+      "Step 3: 通过 Next.js HTTP API POST /api/project/init 创建新项目后，spec/agents/ 下包含 team3.md、arch_prompt.md、dev_prompt.md、uat_prompt.md 四个文件且内容非空",
+      "Step 4: 通过 Next.js HTTP API POST /api/project/init 创建新项目后，uat/ 下包含 simulate_human.mjs、logger.mjs、browser.mjs、watchdog.mjs 四个文件且内容非空",
+      "Step 5: e2e 必须通过真实 Next.js server 的 HTTP API 调用（不允许 vitest 直接 import initWorkspace），验证模板文件确实被 copy 到目标项目目录"
+    ],
+    "passes": true
+  },
+  {
+    "id": 6,
+    "description": "Workspace 页面启动 Daemon 按钮 + __dirname 修复",
+    "checkpoint": [
+      "Step 1: start-daemon.ts resolveDaemonEntry() 和 init-agents.ts resolveOrchestratorEntry() 不再使用 __dirname，改用 process.cwd() 相对路径（path.join(process.cwd(), '..', 'daemon', 'src', ...)）解析 daemon 入口",
+      "Step 2: 新增 POST /api/project/start API，body 为 { workspace }，内部调用 startDaemon 启动 orchestrator，返回 { success, pid, port }。daemon 入口路径通过 process.cwd() 解析，不依赖 __dirname",
+      "Step 3: Workspace 页面（/workspace?path=...）在 daemon 状态为 disconnected 时，ChatPanel 状态栏显示「启动 Daemon」按钮；状态为 connected 时按钮隐藏",
+      "Step 4: 点击按钮 → POST /api/project/start → 成功后 WebSocket 自动重连 → 状态变为 connected（按钮消失、状态点变绿）",
+      "Step 5: e2e 通过真实 Next.js HTTP API 验证：POST /api/project/start 返回 success + pid，随后 ws://127.0.0.1:<port> 可连接并收到 connected 消息"
+    ],
+    "passes": true
+  }
+]

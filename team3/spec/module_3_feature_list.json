@@ -1,0 +1,248 @@
+[
+  {
+    "id": 1,
+    "description": "Daemon 进程启动与 WebSocket 服务：启动 Node.js 常驻进程，监听可配置端口（默认 3100），PID 写入 .team3-project.json，WebSocket 接受连接、ping/pong 心跳、断线重连",
+    "checkpoint": [
+      "Step 1: 终端执行启动命令，daemon 进程启动成功，控制台输出监听端口",
+      "Step 2: .team3-project.json 中 init_daemon 字段记录进程 PID",
+      "Step 3: WebSocket 客户端连接成功，ping/pong 心跳正常",
+      "Step 4: daemon 周期性更新 .team3-project.json 的 daemon_heart 字段",
+      "Step 5: WebSocket 客户端断开后重新连接，自动恢复通信"
+    ],
+    "passes": true
+  },
+  {
+    "id": 2,
+    "description": "Agent 初始化 init_agent：提供 init_agent 接口，生成合法 UUID v4 作为 sessionId，更新 .team3-project.json，首次 spawn claude code 进程（arch/uat），验证 agent 通信成功",
+    "checkpoint": [
+      "Step 1: 调用 init_agent(arch)，生成合法 UUID v4 写入 .team3-project.json 的 arch_agent.session.runing",
+      "Step 2: 调用 init_agent(uat)，生成合法 UUID v4 写入 .team3-project.json 的 uat_agent.session.runing",
+      "Step 3: arch 首次启动使用 --session-id + --system-prompt-file spec/agents/arch_prompt.md + --output-format stream-json",
+      "Step 4: arch 启动时通过 -p 要求 arch 写 actions.jsonl 通知人类 [arch 已在线]",
+      "Step 5: 启动完成后 actions.jsonl 中出现 arch 的通知消息"
+    ],
+    "passes": true
+  },
+  {
+    "id": 3,
+    "description": "actions.jsonl 文件监听 + 消息队列 + Claude Code 调度（Agent→Agent 全链路）：chokidar 增量监测 actions.jsonl 新行，解析 action 对象，per-agent FIFO 队列串行执行，Agent 忙时排队并合并消息，spawn claude（区分 --session-id 新建和 --resume 复用），Dev session 生命周期管理",
+    "checkpoint": [
+      "Step 1: 手动追加一行合法 action 到 actions.jsonl，daemon 日志显示检测到新消息并正确解析",
+      "Step 2: 发送 dev_do action，daemon 为 dev 生成新 UUID sessionId，旧 sessionId 归档到 done[]，使用 --session-id 启动新 session",
+      "Step 3: 发送 dev_fix action，daemon 沿用当前 dev sessionId，使用 --resume 恢复 session",
+      "Step 4: 模拟 agent 正在执行中，新消息进入队列等待，前一个执行完毕后，多条排队消息合并为一条 prompt 发送",
+      "Step 5: Agent 执行完毕（exit code 0），daemon 正确识别任务完成状态"
+    ],
+    "passes": true
+  },
+  {
+    "id": 4,
+    "description": "消息路由 Agent→人类 WebSocket 推送：当 actions.jsonl 出现 from∈{arch,dev,uat} 的消息，daemon 通过 ws 推送 agent.msg 事件给 web；人类消息不回推避免重复",
+    "checkpoint": [
+      "Step 1: Agent（如 arch）写入 actions.jsonl 一条 to_human 消息，daemon 检测到后通过 ws 推送 agent.msg 事件",
+      "Step 2: ws 客户端收到的 payload 为该行 jsonl 原文字符串",
+      "Step 3: 人类（from=human）写入 actions.jsonl 时，daemon 不通过 ws 回推给 web（避免重复显示）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 5,
+    "description": "消息路由 人类→Agent：人类通过 web 写入 actions.jsonl（to_arch/to_dev 等），daemon 监测到后路由至目标 agent 队列，agent 处理后响应",
+    "checkpoint": [
+      "Step 1: 模拟人类发送 to_arch 消息写入 actions.jsonl，daemon 检测并路由到 arch 队列",
+      "Step 2: arch agent 收到消息后处理，响应写回 actions.jsonl",
+      "Step 3: daemon 检测到 arch 的响应，通过 ws 推送给 web"
+    ],
+    "passes": true
+  },
+  {
+    "id": 6,
+    "description": "消息改写协议（reread）：按 to 目标改写 message——human 去除、uat 过滤 feature_list/progress、其余保留",
+    "checkpoint": [
+      "Step 1: 消息含 [reread: spec/module_1.md, spec/module_1_feature_list.json]，to=human 时，转发内容不含 reread 部分",
+      "Step 2: 同上消息 to=uat 时，转发内容中 reread 去掉了 feature_list 和 progress 文件，保留其余",
+      "Step 3: 同上消息 to=arch 或 to=dev 时，转发内容保留完整 reread",
+      "Step 4: to=dev 不追加其它工作目录协议",
+      "Step 5: to=uat 不追加其它工作目录协议"
+    ],
+    "passes": true
+  },
+  {
+    "id": 7,
+    "description": "Agent 执行日志记录：每个 Agent 独立日志文件，按日滚动新建，记录 claude code 原始输出，便于排查问题",
+    "checkpoint": [
+      "Step 1: Agent 执行一次任务后，对应日志文件被创建（如 logs/arch_2026-05-24.log）",
+      "Step 2: 日志内容包含 claude code 的 stream-json 原始输出",
+      "Step 3: 跨日（或模拟日期变化）时，自动创建新日志文件",
+      "Step 4: 不同 Agent（arch/dev/uat）各自独立的日志文件"
+    ],
+    "passes": true
+  },
+  {
+    "id": 8,
+    "description": "接口复用重构：AgentScheduler._buildArgs() 消除与 init-agent.js buildClaudeArgs() 的重复实现，抽取共享的 claude 参数构建模块，统一 --session-id/--resume/--system-prompt-file/--output-format 的构建逻辑",
+    "checkpoint": [
+      "Step 1: 存在一个共享模块（如 claude-args.js），统一构建 claude 命令参数",
+      "Step 2: init-agent.js 的 initAgent 调用共享模块而非自有 buildClaudeArgs",
+      "Step 3: agent-scheduler.js 的 _executeNext 调用共享模块而非自有 _buildArgs",
+      "Step 4: Feature #2 和 Feature #3 的全部 e2e 测试回归通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 9,
+    "description": "Feature #2/#3 e2e 补测：消除 tautology 测试（test3_actions_jsonl.js mock 自写自验），为 claude spawn 依赖补充 stub-claude 验证脚本（轻量 shell 脚本模拟 claude CLI 行为，验证参数格式正确性而非 mock spawn 函数）",
+    "checkpoint": [
+      "Step 1: e2e/feature_2/test3_actions_jsonl.js 不再是 mock 自写自验，改用 stub-claude 脚本实际 spawn 子进程",
+      "Step 2: 存在 e2e/stub-claude.sh（或 .js）脚本，接收 -p/--session-id/--resume 等参数，校验格式合法后模拟输出 stream-json 并 exit 0",
+      "Step 3: Feature #3 的 e2e test2-test5 改用 stub-claude 脚本真实 spawn 而非 mock spawn 函数",
+      "Step 4: 全部 e2e 回归通过，无 tautology 测试"
+    ],
+    "passes": true
+  },
+  {
+    "id": 10,
+    "description": "修复 arch/uat 首次调度使用 --resume 导致 No conversation found：_resolveSession 不再依赖 initialized，缺少 session.runing 时用 --session-id；复用 session 时若 resume 报 No conversation found，由 retry 路径重建 session",
+    "checkpoint": [
+      "Step 1: init_agent 只写 session.runing，不写 initialized",
+      "Step 2: _resolveSession 对 arch/uat，缺少 session.runing 时返回 isNew=true（用 --session-id）",
+      "Step 3: 全新 workspace 首次调度 arch，使用 --session-id 而非 --resume",
+      "Step 4: 后续调度 arch（session.runing 存在），正常使用 --resume",
+      "Step 5: 回归：Module 3 全部既有 e2e 通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 11,
+    "description": "e2e 全部改用真实 claude code：移除 stub-claude.js 依赖，所有涉及 claude spawn 的 e2e 测试改为调用真实 claude CLI，验证端到端真实行为（session 创建/resume、stream-json 输出、actions.jsonl 写入、超时处理）",
+    "checkpoint": [
+      "Step 1: Feature #2 e2e（init_agent）使用真实 claude code spawn，arch 首次启动后 actions.jsonl 出现真实通知消息",
+      "Step 2: Feature #3 e2e（调度引擎）使用真实 claude code，验证 dev_do 新建 session + dev_fix resume session 的真实行为",
+      "Step 3: Feature #5 e2e（人类→Agent 全链路）使用真实 claude code，human 写入 to_arch → claude 处理 → 响应写回 actions.jsonl → ws 推送",
+      "Step 4: Feature #10 e2e 使用真实 claude code，验证首次 --session-id 和后续 --resume 的真实行为",
+      "Step 5: 所有 e2e 测试通过，不依赖 stub-claude.js（可保留该文件供单测使用，但 e2e 不引用）",
+      "通用要求：claude code 执行必须有日志记录，方便排查问题"
+    ],
+    "passes": true
+  },
+  {
+    "id": 12,
+    "description": "JSONL 格式自动修复：ActionWatcher 检测到多行 JSON（逐行 parse 失败）时，buffer 连续行直到拼出合法 JSON 后正常 emit，并 debounce 500ms 后修复文件（合并为单行写回）；修复写入不触发重复处理（文件大小比对过滤）",
+    "checkpoint": [
+      "Step 1: 向 actions.jsonl 追加一条跨 3 行的 JSON（手动模拟 agent 换行），ActionWatcher 仍能正确 emit 完整 action 对象",
+      "Step 2: emit 后 500ms 内，文件被自动修复为单行 JSONL 格式（读文件验证该条目变为一行）",
+      "Step 3: 修复写入不触发 ActionWatcher 二次 emit（同一条消息只 emit 一次）",
+      "Step 4: 修复期间有新的合法单行写入，新消息不丢失、正常 emit",
+      "Step 5: 回归：Module 3 全部既有 e2e 通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 13,
+    "description": "Claude 进程超时 Kill + 异常退出重试 + Dead Letter 通知：spawn claude 后启动 30 分钟超时 timer（SIGTERM→5s→SIGKILL），非零退出时消息 prepend 回队列重试最多 3 次（delay 5s），重试仍失败则自动写 to_human 到 actions.jsonl 通知人类并附失败摘要",
+    "checkpoint": [
+      "Step 1: spawn 一个模拟 hang 的进程（如 sleep 99999），配置短超时（测试用 5s），验证超时后进程被 SIGTERM kill",
+      "Step 2: kill 后本次消息自动 prepend 回队列头部，5s 后重新执行（观察 spawn 事件触发第 2 次）",
+      "Step 3: 模拟连续 3 次非零退出（exit 1），第 3 次失败后 daemon 自动追加 to_human 到 actions.jsonl，message 含 Agent 角色 + 失败原因 + 消息摘要前 200 字符",
+      "Step 4: Dead Letter 写入后该 Agent 队列恢复 idle，后续新消息正常调度执行（不卡死）",
+      "Step 5: 回归：Module 3 全部既有单测 + e2e 通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 14,
+    "description": "Agent 回复 Fallback 写回 actions.jsonl：claude exit 0 后解析 stdout stream-json 提取 result text，检查 actions.jsonl 在本次执行期间是否有该 role 新写入行，若无则 daemon 自动追加（用正则从 result 中提取 action JSON 或构造 to_human），触发 WS 推送",
+    "checkpoint": [
+      "Step 1: 模拟 Agent exit 0 且 stdout 含 type=result 文本，但 actions.jsonl 无该 agent 新行 → daemon 自动追加 to_human 消息到 actions.jsonl",
+      "Step 2: 自动追加的消息格式正确（action/from/to/ts/message 全字段），WS broadcast 触发",
+      "Step 3: Agent exit 0 且已自行写入 actions.jsonl → daemon 不重复追加（检测到执行期间有新行）",
+      "Step 4: stdout 为空或无 result 事件 → 不追加、不报错、不影响后续队列",
+      "Step 5: 回归：Module 3 全部既有单测 + e2e 通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 15,
+    "description": "ActionWatcher offset 持久化 + Daemon 重启 Replay：读取一行后立即更新 lastProcessingOffset 到 .daemon-state.json（debounce 200ms），Daemon 启动时从 persisted offset 恢复并 replay 未派发的行，文件截断时 reset 为 0",
+    "checkpoint": [
+      "Step 1: Daemon 运行时处理 actions.jsonl 新行，.daemon-state.json 的 lastProcessingOffset 被更新（值 = 该行末尾字节位置）",
+      "Step 2: kill -9 daemon（模拟崩溃），崩溃期间向 actions.jsonl 追加 2 行新消息",
+      "Step 3: 重启 daemon，从 persisted offset 开始读取，2 行消息被正常 replay 并路由到对应 agent 队列",
+      "Step 4: actions.jsonl 被截断（文件大小 < persisted offset）时，offset 自动 reset 为 0，从头读取",
+      "Step 5: 回归：Module 3 全部既有单测 + e2e 通过"
+    ],
+    "passes": true
+  },
+  {
+    "id": 16,
+    "description": "Daemon Watchdog 自重启 + 孤儿进程清理：bash watchdog wrapper 检测 daemon 非零退出后 5s 重启（连续 5 次失败则停止）；Daemon startup routine 读取 .daemon-state.json spawnedPids + .team3-project.json dev_agent.session.done[] 清理孤儿进程；运行时记录 spawn PID、graceful shutdown 时 SIGTERM 子进程",
+    "checkpoint": [
+      "Step 1: watchdog.sh 启动 daemon，daemon 异常退出（exit 1）后 5s 内自动重启（验证进程 PID 变化）",
+      "Step 2: 连续 5 次异常退出后 watchdog 停止重启（不再有新进程产生）",
+      "Step 3: Daemon 启动时读取 spawnedPids，已死进程清理记录，仍存活孤儿进程被 SIGTERM 关闭",
+      "Step 4: dev_agent.session.done[] 中已归档 session 对应的进程仍存活 → startup routine SIGTERM 关闭",
+      "Step 5: 运行时 spawn 的 PID 实时写入 .daemon-state.json，进程退出后移除；graceful shutdown 时所有子进程收到 SIGTERM"
+    ],
+    "passes": true
+  },
+  {
+    "id": 17,
+    "description": "Workspace 路径统一：spawn claude 显式设 cwd=workspaceDir（不继承 daemon cwd）、.daemon-state.json 路径从 workspaceDir 推导、agent logDir 由 orchestrator 传递给 scheduler，消除所有硬编码路径",
+    "checkpoint": [
+      "Step 1: 从非 workspace 目录启动 daemon，spawn 的 claude 进程 cwd 为 workspaceDir（非 daemon cwd）",
+      "Step 2: agent 日志写入 <workspaceDir>/logs/ 目录（非 daemon/logs/）",
+      "Step 3: .daemon-state.json 创建在 workspaceDir 根目录（非 daemon/src/../../）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 18,
+    "description": "Daemon 结构化运行日志 + Web 结构化日志：新建 daemon-logger.js 记录 [START]/[WATCH]/[ROUTE]/[DISPATCH]/[DONE]/[TIMEOUT]/[RETRY]/[DEAD_LETTER]/[WS]/[ERROR]/[HEALTH] 事件到 <workspace>/logs/daemon.log；新建 web-logger.ts 为全部 API route 增加 [API]/[START]/[WS]/[FILE] 日志",
+    "checkpoint": [
+      "Step 1: Daemon 启动后 logs/daemon.log 出现 [START] 行（含 port/workspace/pid）",
+      "Step 2: 处理 actions.jsonl 消息后 daemon.log 出现 [WATCH] + [DISPATCH] + [DONE] 行",
+      "Step 3: Daemon 关停后出现 [STOP] 行",
+      "Step 4: Web API 调用后 stdout 出现 [API] 行（含 method/path/status/duration）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 19,
+    "description": "Activity-based 心跳超时：监听 stdout 输出更新 lastActivity，连续 5 分钟（可配置 claudeInactivityTimeoutMs）无输出则 SIGTERM kill 进程，与 30 分钟 wall-clock 超时独立运行",
+    "checkpoint": [
+      "Step 1: 配置 2s inactivity timeout，spawn 无输出进程，2s 后被 kill（emit inactivity-timeout 事件）",
+      "Step 2: spawn 持续有输出的进程，不触发 inactivity timeout（正常完成）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 20,
+    "description": "Session 自动重建：retry 路径检测 stderr 含 'No conversation found' 时自动生成新 UUID、更新 .team3-project.json，并让下次重试用 --session-id 新建 session 而非 --resume 坏 session",
+    "checkpoint": [
+      "Step 1: spawn 用 --resume 不存在的 session，stderr 含 'No conversation found'",
+      "Step 2: 自动 _resetSession：新 UUID 写入 project.json 的 session.runing",
+      "Step 3: 重试时用 --session-id（isNew=true）成功创建新 session"
+    ],
+    "passes": true
+  },
+  {
+    "id": 21,
+    "description": "Daemon 内部健康自检：60s 周期检查 actionWatcher/wsServer/lastActivity，单次失败计数器+1、通过归零，连续 3 次失败 process.exit(1) 触发 watchdog 重启",
+    "checkpoint": [
+      "Step 1: mock actionWatcher 为异常状态，3 次检查失败后 daemon exit(1)",
+      "Step 2: 中间一次检查通过，计数器归零，不触发 exit"
+    ],
+    "passes": true
+  },
+  {
+    "id": 22,
+    "description": "Agent stdout stream-json 解析 + WS 广播：stdout-parser.js 解析 stream-json 行（text/thinking/tool_use），daemon-orchestrator 行缓冲 + broadcast agent.log 事件",
+    "checkpoint": [
+      "Step 1: stdout-parser.js 解析真实 stream-json 格式（message.content[] 中 text/thinking/tool_use blocks），text/thinking 截断 500 字符，tool_use 返回 {content:'name 参数摘要', tone:'route'}，system/user/result 返回 null",
+      "Step 2: daemon-orchestrator per-role 行缓冲正确处理 partial line（跨 chunk 的半行不丢失不误解析）",
+      "Step 3: 解析结果非空时 WS 广播 {type:'agent.log', role, lines:[...]}，AgentsPanel 通过 onAgentLog 实时接收",
+      "Step 4: 新增 test/stdout-parser.test.js 覆盖上述场景（含真实 claude log 格式）；现有 daemon npm test 全量通过"
+    ],
+    "passes": true
+  }
+]

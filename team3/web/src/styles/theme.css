@@ -1,0 +1,183 @@
+:root {
+  --font-size: 16px;
+
+  /* === Brand: Mintlify (from awesome-design-md) === */
+  --brand: #00d4a4;
+  --brand-deep: #00b48a;
+  --primary: #0a0a0a;
+  --primary-foreground: #ffffff;
+
+  /* === Surface & Background === */
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+
+  /* === Secondary & Muted === */
+  --secondary: #f7f7f7;
+  --secondary-foreground: #0a0a0a;
+  --muted: #e5e5e5;
+  --muted-foreground: #5a5a5c;
+  --accent: #f7f7f7;
+  --accent-foreground: #0a0a0a;
+
+  /* === Status Colors === */
+  --destructive: #d45656;
+  --destructive-foreground: #ffffff;
+  --success: #00d4a4;
+  --success-foreground: #0a0a0a;
+  --warning: #e8913a;
+  --warning-foreground: #ffffff;
+  --info: #3772cf;
+  --info-foreground: #ffffff;
+
+  /* === Text Hierarchy (Mintlify 5-level) === */
+  --text-primary: #0a0a0a;
+  --text-secondary: #3a3a3c;
+  --text-tertiary: #5a5a5c;
+  --text-disabled: #a8a8aa;
+  --icon-default: #888888;
+
+  /* === Surface Colors === */
+  --surface-page: #fafafa;
+  --surface-subtle: #f7f7f7;
+  --surface-muted: #ededed;
+  --surface-code: #1c1c1e;
+  --brand-tint: rgba(0, 212, 164, 0.08);
+  --brand-tint-strong: rgba(0, 212, 164, 0.12);
+  --text-code: #d4d4d4;
+  --alert-badge: #d45656;
+
+  /* === Borders & Inputs === */
+  --border: #e5e5e5;
+  --border-soft: #ededed;
+  --input: transparent;
+  --input-background: #f7f7f7;
+  --switch-background: #e5e5e5;
+
+  /* === Typography === */
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+
+  /* === Focus Ring === */
+  --ring: #00d4a4;
+
+  /* === Chart Colors === */
+  --chart-1: #00d4a4;
+  --chart-2: #3772cf;
+  --chart-3: #c37d0d;
+  --chart-4: #00b48a;
+  --chart-5: #7cebcb;
+
+  /* === Radius (Mintlify scale) === */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* === Shadows (Mintlify: flat default, minimal elevation) === */
+  --shadow-card: none;
+  --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-mockup: 0 24px 48px -8px rgba(0, 0, 0, 0.12);
+
+  /* === Motion / Animation === */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-moderate: 300ms;
+  --duration-slow: 350ms;
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* === Sidebar (desktop app specific) === */
+  --sidebar-width: 220px;
+  --sidebar-bg: #fafafa;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-active-bg: rgba(0, 212, 164, 0.08);
+  --sidebar-active-text: #00b48a;
+  --sidebar-hover-bg: #f7f7f7;
+  --sidebar-border: #e5e5e5;
+}
+
+.dark {
+  /* === Brand: Mintlify Dark (estimated, brand has no published dark palette) === */
+  --brand: #7cebcb;
+  --brand-deep: #00d4a4;
+  --primary: #ffffff;
+  --primary-foreground: #0a0a0a;
+
+  /* === Surface & Background === */
+  --background: #0a0a0a;
+  --foreground: #ffffff;
+  --card: #1c1c1e;
+  --card-foreground: #ffffff;
+  --popover: #1c1c1e;
+  --popover-foreground: #ffffff;
+
+  /* === Secondary & Muted === */
+  --secondary: #1f1f1f;
+  --secondary-foreground: #ffffff;
+  --muted: #2a2a2a;
+  --muted-foreground: #b3b3b3;
+  --accent: #1f1f1f;
+  --accent-foreground: #7cebcb;
+
+  /* === Status Colors === */
+  --destructive: #f55a3c;
+  --destructive-foreground: #ffffff;
+  --success: #7cebcb;
+  --success-foreground: #0a0a0a;
+  --warning: #fbbf24;
+  --warning-foreground: #0a0a0a;
+  --info: #60a5fa;
+  --info-foreground: #0a0a0a;
+
+  /* === Text Hierarchy === */
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --text-tertiary: #888888;
+  --text-disabled: #5a5a5c;
+  --icon-default: #888888;
+
+  /* === Surface Colors === */
+  --surface-page: #0a0a0a;
+  --surface-subtle: #1c1c1e;
+  --surface-muted: #2a2a2a;
+  --surface-code: #1c1c1e;
+  --brand-tint: rgba(0, 212, 164, 0.12);
+  --brand-tint-strong: rgba(0, 212, 164, 0.18);
+  --text-code: #d4d4d4;
+  --alert-badge: #f55a3c;
+
+  /* === Borders & Inputs === */
+  --border: #1f1f1f;
+  --border-soft: #2a2a2a;
+  --input: transparent;
+  --input-background: #1f1f1f;
+  --switch-background: #3a3a3c;
+
+  /* === Focus Ring === */
+  --ring: #7cebcb;
+
+  /* === Shadows (dark mode: border-based separation) === */
+  --shadow-card: none;
+  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  /* === Sidebar === */
+  --sidebar-bg: #0f0f0f;
+  --sidebar-foreground: #ffffff;
+  --sidebar-active-bg: rgba(0, 212, 164, 0.12);
+  --sidebar-active-text: #7cebcb;
+  --sidebar-hover-bg: #1c1c1e;
+  --sidebar-border: #1f1f1f;
+}

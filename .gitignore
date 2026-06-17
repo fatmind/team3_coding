@@ -1,0 +1,77 @@
+# ---------- Node.js ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.pnpm-store/
+.yarn/cache
+.yarn/install-state.gz
+
+# ---------- 构建产物 ----------
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ---------- Next.js ----------
+.next/
+next-env.d.ts
+
+# ---------- 环境变量 / 私密文件 ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ---------- 日志 / 运行时 ----------
+logs/
+*.log
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ---------- 测试 / 覆盖率 ----------
+coverage/
+.nyc_output/
+.vitest-cache/
+playwright-report/
+test-results/
+e2e-results/
+
+# ---------- 缓存 ----------
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.turbo/
+.swc/
+
+# ---------- IDE / 编辑器 ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------- macOS ----------
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# ---------- Windows ----------
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- 项目本地 ----------
+.claude/
+tmp/
+temp/
+*.local
