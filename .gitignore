@@ -12,9 +12,11 @@ lerna-debug.log*
 
 # ---------- 构建产物 ----------
 dist/
-build/
 out/
+pkg/
 *.tsbuildinfo
+# build/embed-prompts.js 的生成物
+team3/daemon/src/embedded-prompts.js
 
 # ---------- Next.js ----------
 .next/

@@ -5,7 +5,7 @@
 - MiniMax Agent Team: https://agent.minimax.io/docs/techblog/agent-team
 - Slock - Is Having Agents in the Room Meant to Be Chaotic?: https://slock.ai/resources/blog/is-having-agents-in-the-room-meant-to-be-chaotic/
 - Slock - Agents Need Names: https://slock.ai/resources/blog/agents-need-names/
-- Team3 v2: `team3/spec/app_design_v2.md`
+- Team3 v2: `team3/spec/app_design.md`
 
 ## 1. MiniMax Agent Team
 
