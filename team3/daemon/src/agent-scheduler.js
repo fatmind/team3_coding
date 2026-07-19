@@ -8,11 +8,11 @@ const EventEmitter = require('events');
 const ProjectJson = require('./project-json');
 const config = require('./config');
 const { AgentQueue, mergeMessages } = require('./agent-queue');
-const { buildClaudeArgs } = require('./claude-args');
 const { getInProgressModuleId } = require('./message-rewriter');
 const AgentLogger = require('./agent-logger');
-const { applyFallback, getFileOffset } = require('./reply-fallback');
-const { parseStreamJsonLine, extractLogTimestamp, formatLogTime } = require('./stdout-parser');
+const { hasNewWritesSince, getFileOffset, extractActionFromResult, buildFallbackAction } = require('./reply-fallback');
+const { formatLogTime } = require('./stdout-parser');
+const claudeCodeProvider = require('./code-cli/claude-code');
 
 const HUMAN_DISPATCH_ACK_MESSAGE = 'get，开始处理中，稍等';
 
@@ -48,9 +48,11 @@ class AgentScheduler extends EventEmitter {
    * @param {string} [options.actionsFilePath] - Path to actions.jsonl (for dead letter write)
    * @param {string} [options.workspaceDir] - Workspace root directory (used as cwd for spawned agents)
    * @param {string} [options.modulesProgressPath] - Path to modules_progress.json (arch session binding)
+   * @param {Object} [options.provider] - CodeCli provider instance (from code-cli/)
    */
   constructor(options = {}) {
     super();
+    this.provider = options.provider || claudeCodeProvider;
     this.projectJsonPath = options.projectJsonPath || config.projectJsonPath;
     this.specDir = options.specDir || path.resolve(__dirname, '../../spec');
     this.modulesProgressPath = options.modulesProgressPath
@@ -96,6 +98,8 @@ class AgentScheduler extends EventEmitter {
     this._heartbeatTimers = { arch: null, dev: null, uat: null };
     // Feature #22: Per-role stdout line buffers for stream-json parsing
     this._lineBuffers = { arch: '', dev: '', uat: '' };
+    // Token estimation: per-role char counters, active during a session
+    this._sessionStats = { arch: null, dev: null, uat: null };
     // User interrupt state: a human message can stop the current claude turn and resume.
     this._interrupts = { arch: null, dev: null, uat: null };
     this._resumeAfterInterrupt = { arch: false, dev: false, uat: false };
@@ -197,16 +201,22 @@ class AgentScheduler extends EventEmitter {
       this._resumeAfterInterrupt[role] = false;
     }
 
-    // Build claude args
-    const args = this._buildArgs(role, sessionId, isNew, prompt);
+    // Build args via provider
+    const args = this.provider.buildArgs({ prompt, sessionId, isNew, role, workspaceDir: this.workspaceDir });
+
+    // Init token estimation stats for this session
+    this._sessionStats[role] = {
+      startTs: Date.now(), turns: 0,
+      inputChars: 0, outputChars: 0, toolResultChars: 0, thinkingChars: 0,
+    };
 
     this.emit('spawn', { role, sessionId, isNew, prompt, args, messageCount: messages.length, retryCount });
 
     // Feature #14: Record actions.jsonl offset before spawn for fallback check
     const spawnOffset = getFileOffset(this.actionsFilePath);
 
-    // Spawn claude code process (Feature #17: explicit cwd = workspace root)
-    const proc = this.spawnFn('claude', args, {
+    // Spawn code CLI process (Feature #17: explicit cwd = workspace root)
+    const proc = this.spawnFn(this.provider.command, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
       cwd: this.workspaceDir,
@@ -223,11 +233,11 @@ class AgentScheduler extends EventEmitter {
       const chunk = data.toString();
       stdout += chunk;
       this.emit('stdout', { role, data: chunk });
-      // Write raw stdout to per-agent log file (Feature #7)
-      this.agentLogger.write(role, data);
       // Feature #19: Reset inactivity heartbeat on any stdout activity
       this._resetHeartbeat(role, proc, () => { timedOut = true; });
       // Feature #22: Line-buffered stream-json parsing + emit agent-log
+      // Also writes to agent log (moved from raw write to line-level write
+      // so result events can be enriched with token estimates before logging)
       this._processStdoutChunk(role, chunk);
     });
 
@@ -259,8 +269,14 @@ class AgentScheduler extends EventEmitter {
       // Clear timeout/kill timers (includes heartbeat)
       this._clearTimers(role);
       this.processes[role] = null;
-      // Feature #22: Flush remaining line buffer
+      // Feature #22: Flush remaining line buffer to log
+      const remaining = this._lineBuffers[role];
+      if (remaining && remaining.trim()) {
+        const processedLine = this._processLineForStats(role, remaining);
+        this.agentLogger.write(role, processedLine + '\n');
+      }
       this._lineBuffers[role] = '';
+      this._sessionStats[role] = null;
 
       // Treat signal-killed (code=null, signal='SIGTERM'/'SIGKILL') as non-zero
       const effectiveCode = (code === null && signal) ? 1 : code;
@@ -325,7 +341,7 @@ class AgentScheduler extends EventEmitter {
 
         // Feature #20: If resume points at a missing Claude conversation,
         // replace the logical session id and retry the same message as a new CLI session.
-        const shouldRepairMissingSession = this._isMissingConversationError(stderr);
+        const shouldRepairMissingSession = this._isMissingConversationError(effectiveCode, stderr, stdout);
         if (shouldRepairMissingSession) {
           this._resetSession(role);
           this.emit('session-reset', { role, reason: 'No conversation found' });
@@ -359,9 +375,7 @@ class AgentScheduler extends EventEmitter {
       queue.markIdle();
 
       // Feature #14: Reply fallback — if agent didn't write to actions.jsonl, auto-append
-      const fallbackResult = applyFallback({
-        stdout, role, actionsFilePath: this.actionsFilePath, spawnOffset,
-      });
+      const fallbackResult = this._applyFallback({ stdout, role, spawnOffset });
       if (fallbackResult.applied) {
         this.emit('fallback', { role, action: fallbackResult.action, reason: fallbackResult.reason });
       }
@@ -704,21 +718,34 @@ class AgentScheduler extends EventEmitter {
     }
   }
 
-  _isMissingConversationError(stderr) {
-    return /no conversation found/i.test(stderr || '');
+  _isMissingConversationError(exitCode, stderr, stdout) {
+    return this.provider.isMissingSessionError(exitCode, stderr, stdout);
   }
 
   /**
-   * Build claude command arguments using shared claude-args module.
-   *
-   * @param {string} role - Agent role
-   * @param {string} sessionId - Session UUID
-   * @param {boolean} isNew - True for new session (--session-id), false for resume (--resume)
-   * @param {string} prompt - The merged prompt
-   * @returns {string[]} Command arguments array
+   * Feature #14: Apply fallback using provider's extractResult.
    */
-  _buildArgs(role, sessionId, isNew, prompt) {
-    return buildClaudeArgs({ prompt, sessionId, isNew, role });
+  _applyFallback({ stdout, role, spawnOffset }) {
+    const resultText = this.provider.extractResult(stdout);
+    if (!resultText) {
+      return { applied: false, action: null, reason: 'no-result' };
+    }
+    if (hasNewWritesSince(this.actionsFilePath, spawnOffset, role)) {
+      return { applied: false, action: null, reason: 'already-written' };
+    }
+    let action = extractActionFromResult(resultText, role);
+    if (!action) {
+      action = buildFallbackAction(resultText, role);
+    }
+    if (!action.ts) {
+      action.ts = Math.floor(Date.now() / 1000);
+    }
+    try {
+      fs.appendFileSync(this.actionsFilePath, JSON.stringify(action) + '\n');
+    } catch (err) {
+      return { applied: false, action, reason: `write-error: ${err.message}` };
+    }
+    return { applied: true, action, reason: 'fallback-applied' };
   }
 
   _isHumanInterrupt(action) {
@@ -809,6 +836,7 @@ class AgentScheduler extends EventEmitter {
   /**
    * Feature #22: Process a stdout chunk with line buffering.
    * Splits on '\n', keeps partial lines in buffer, parses complete lines.
+   * Writes each line to agent log (with result events enriched by token estimates).
    * Emits 'agent-log' event with parsed results for WS broadcast.
    *
    * @param {string} role - Agent role (arch/dev/uat)
@@ -818,27 +846,109 @@ class AgentScheduler extends EventEmitter {
     this._lineBuffers[role] += chunk;
     const buffer = this._lineBuffers[role];
     const lastNewline = buffer.lastIndexOf('\n');
-    if (lastNewline === -1) return; // No complete line yet
+    if (lastNewline === -1) return;
 
     const complete = buffer.substring(0, lastNewline);
     this._lineBuffers[role] = buffer.substring(lastNewline + 1);
 
     const lines = complete.split('\n');
     const parsedLines = [];
+    const logLines = [];
 
     for (const line of lines) {
-      if (!line.trim()) continue;
-      const result = parseStreamJsonLine(line);
+      if (!line.trim()) {
+        logLines.push(line);
+        continue;
+      }
+
+      const processedLine = this._processLineForStats(role, line);
+      logLines.push(processedLine);
+
+      const result = this.provider.parseStdoutLine(line);
       if (result) {
-        const time = extractLogTimestamp(line) || formatLogTime(new Date());
+        const time = formatLogTime(new Date());
         for (const item of result) {
           parsedLines.push({ ...item, time });
         }
       }
     }
 
+    // Write all processed lines to agent log (Feature #7)
+    if (logLines.length > 0) {
+      this.agentLogger.write(role, logLines.join('\n') + '\n');
+    }
+
     if (parsedLines.length > 0) {
       this.emit('agent-log', { role, lines: parsedLines });
+    }
+  }
+
+  /**
+   * Process a single stream-json line for token estimation.
+   * Accumulates char counts by event type. When a result event is encountered,
+   * fills in the usage fields (originally 0 from CLI) with char-based estimates.
+   *
+   * @param {string} role - Agent role
+   * @param {string} line - Complete JSON line
+   * @returns {string} Original line, or enriched line if it's a result event
+   */
+  _processLineForStats(role, line) {
+    const stats = this._sessionStats[role];
+    if (!stats) return line;
+
+    let parsed;
+    try {
+      parsed = JSON.parse(line.trim());
+    } catch (e) {
+      return line;
+    }
+
+    switch (parsed.type) {
+      case 'system':
+      case 'user':
+        stats.inputChars += line.length;
+        return line;
+
+      case 'assistant': {
+        stats.turns++;
+        const blocks = parsed.message && parsed.message.content;
+        if (Array.isArray(blocks)) {
+          for (const block of blocks) {
+            if (block.type === 'thinking') {
+              stats.thinkingChars += (block.thinking || '').length;
+            } else if (block.type === 'redacted_thinking') {
+              stats.thinkingChars += (block.data || '').length;
+            } else if (block.type === 'text') {
+              stats.outputChars += (block.text || '').length;
+            } else if (block.type === 'tool_use') {
+              stats.outputChars += JSON.stringify(block.input || {}).length;
+            }
+          }
+        }
+        return line;
+      }
+
+      case 'tool_result':
+        stats.toolResultChars += line.length;
+        return line;
+
+      case 'result': {
+        if (!parsed.usage) parsed.usage = {};
+        parsed.usage.input_tokens = Math.round(stats.inputChars / 4);
+        parsed.usage.output_tokens = Math.round((stats.outputChars + stats.thinkingChars) / 4);
+        parsed._token_estimate = {
+          input_chars: stats.inputChars,
+          output_chars: stats.outputChars,
+          tool_result_chars: stats.toolResultChars,
+          thinking_chars: stats.thinkingChars,
+          turns: stats.turns,
+          duration_s: Math.round((Date.now() - stats.startTs) / 1000),
+        };
+        return JSON.stringify(parsed);
+      }
+
+      default:
+        return line;
     }
   }
 

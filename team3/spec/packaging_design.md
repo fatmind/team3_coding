@@ -62,8 +62,8 @@ team_coding3/
 │   │   └── src/
 │   │       ├── orchestrator-entry.js
 │   │       ├── agent-scheduler.js
-│   │       ├── claude-args.js
-│   │       ├── embedded-prompts.js        ← build/embed-prompts.js 生成，.gitignore
+│   │       ├── code-cli/               ← 各 CLI provider（详见 app_codecli_fit.md）
+│   │       ├── embedded-prompts.js     ← build/embed-prompts.js 生成，.gitignore
 │   │       └── ...
 │   │
 │   ├── build/                             ← 构建工具（不发布）
@@ -212,30 +212,8 @@ cd pkg && npm pack
 
 ## daemon prompt 传递（无条件 embedded）
 
-### `daemon/src/claude-args.js`
+已迁移至 `code-cli/` provider 体系（详见 `app_codecli_fit.md`）。`claude-args.js` 已删除，各 provider 内部的 `buildArgs()` 负责参数构造，embedded prompts 通过 `--system-prompt` 内联传递。
 
-```js
-const path = require('path');
-const embeddedPrompts = require('./embedded-prompts');
-
-function buildClaudeArgs(options) {
-  const { prompt, sessionId, isNew, role } = options;
-  if (!prompt) throw new Error('buildClaudeArgs: prompt is required');
-  if (!sessionId) throw new Error('buildClaudeArgs: sessionId is required');
-  if (!role) throw new Error('buildClaudeArgs: role is required');
-
-  const args = ['-p', prompt];
-  args.push(isNew ? '--session-id' : '--resume', sessionId);
-  args.push('--system-prompt', embeddedPrompts[role]);
-  args.push('--output-format', 'stream-json');
-  args.push('--verbose');
-  return args;
-}
-
-module.exports = { buildClaudeArgs };
-```
-
-无 fallback、无条件分支、无 `getSystemPromptPath`。daemon 永远用 embedded prompts。
 如果 `embedded-prompts.js` 不存在（开发者忘了生成），daemon 启动时直接报错——提示执行 `node build/embed-prompts.js`。
 
 ---
@@ -454,8 +432,8 @@ bash build/build.sh
 | `web/src/lib/web-logger.ts` | `getLogBase()` → `~/.team3/` |
 | `web/src/lib/init/start-daemon.ts` | dev/prod 双模式入口路径（无 TEAM3_PROMPTS_DIR） |
 | `web/src/app/api/project/start/route.ts` | 复用 start-daemon.ts 路径逻辑 |
-| `daemon/src/claude-args.js` | 简化为无条件 `require('./embedded-prompts')` + `--system-prompt` inline |
-| `daemon/src/agent-scheduler.js` | `_buildArgs` 传 role，去掉 systemPromptFile |
+| `daemon/src/code-cli/` | 替代 claude-args.js，各 provider 内部 buildArgs（详见 `app_codecli_fit.md`） |
+| `daemon/src/agent-scheduler.js` | 改为用 this.provider 调用，去掉 systemPromptFile |
 | `web/next.config.ts` | 加 `output: 'standalone'` |
 
 ### 目录变更

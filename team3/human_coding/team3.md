@@ -125,16 +125,24 @@ status: in_progress | done | rejected
 
 ### `spec/decision_log.md` — 经验沉淀
 - 满足触发条件才写，写入前合并同主题、冲突标 `//conflict` 不自行裁决，且通知人类去判断
-- **触发条件**（满足任一才写，不强制每次任务必写）：
-    - 人类做出非显然决策（讨论中的判断）
-    - 自己踩到非显然坑或独到调试技巧
+- Arch、Dev、UAT 三个角色都可以独立写入
+- **触发条件**（任何偏离理想路径的都记，满足任一即写）：
+    - 人类做出决策（方向、取舍、打回）
+    - 自修复 ≥2 轮（说明 checkpoint/spec 不够清楚，或方向走偏了才发现）
+    - UAT 同类失败 ≥2 轮（验证环境有系统问题，或验证集设计有缺陷）
+    - 模型做了错误假设（猜格式、猜返回值、没看真实数据就动手）
+    - 验收缺乏论据（秒过、没跑测试、没对照 spec）
+    - 踩到非显然坑或发现独到调试技巧
     - 发现既有记录需修订或与现状冲突
 - decision_log.md 格式要求
 ```markdown
 ## YYYY-MM-DD HH:mm:ss | 记录者 | 类型（人类决策/经验教训）
 **背景**
+...描述...
+ref: module_X feature_N | commit abc1234 / 文件路径 / session id
 **结论**
 ```
+- `ref` 行写在**背景**末尾：标明所属 module/feature + 可追溯的 commit、文件路径或 session id（有就写，没有可省略）
 
 ### `spec/actions.jsonl` - 人和Agent两两沟通
 

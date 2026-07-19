@@ -20,8 +20,8 @@ describe("resolveSafePath", () => {
   });
 
   it("resolves nested directory paths", () => {
-    const result = resolveSafePath("spec/agents/team3.md", WORKSPACE);
-    expect(result).toBe(path.resolve(WORKSPACE, "spec/agents/team3.md"));
+    const result = resolveSafePath("cli/simulate_human.mjs", WORKSPACE);
+    expect(result).toBe(path.resolve(WORKSPACE, "cli/simulate_human.mjs"));
   });
 
   it("returns null for ../etc/passwd traversal", () => {

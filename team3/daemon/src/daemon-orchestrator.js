@@ -48,6 +48,7 @@ class DaemonOrchestrator extends EventEmitter {
    * @param {string} [options.stateFilePath] - Path to .daemon-state.json
    * @param {StatePersistence} [options.statePersistence] - Override StatePersistence (for testing)
    * @param {string} [options.workspaceDir] - Workspace root directory (all paths derived from this)
+   * @param {Object} [options.provider] - CodeCli provider instance (from code-cli/)
    */
   constructor(options = {}) {
     super();
@@ -93,6 +94,7 @@ class DaemonOrchestrator extends EventEmitter {
       actionsFilePath: options.actionsFilePath || path.join(this.workspaceDir, 'spec', 'actions.jsonl'),
       spawnFn: options.spawnFn,
       uuidFn: options.uuidFn,
+      provider: options.provider,
     });
 
     this.messageRouter = new MessageRouter({

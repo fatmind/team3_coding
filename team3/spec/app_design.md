@@ -93,7 +93,7 @@ UAT 全自动执行
 
 ## 架构思路：纯本地三件套
 
-**这是一个用户本地部署产品**——web、daemon、claude code 一起安装在用户的电脑上，访问用户本地文件系统。**没有远端服务器**。这一点决定了所有架构选型。
+**这是一个用户本地部署产品**——web、daemon、code cli 一起安装在用户的电脑上，访问用户本地文件系统。**没有远端服务器**。这一点决定了所有架构选型。code cli 通过 Provider 抽象支持多种实现（claude code / qodercli 等），详见 `app_codecli_fit.md`。
 
 ```
 ┌───────────────────────────────────────────────────────┐
@@ -108,11 +108,11 @@ UAT 全自动执行
 │  ┌────────▼─────────────┐    ┌──────▼─────────────────┐  │
 │  │  Daemon (Node 常驻)   │    │   本地文件系统          │  │
 │  │ - 人/Agent两两间沟通桥梁     │   project_dir/        │  │
-│  │ - 操作 claude code      │  └─────────────────────────┘  │
+│  │ - 操作 code cli         │  └─────────────────────────┘  │
 │  └────────┬─────────────┘             ▲                   │
 │           │ stdin / stdout            │ 读写本地文件        │
 │  ┌────────▼───────────────────────────▼─────────────┐    │
-│  │   Claude Code（1 个 agent 1 个 session）       │    │
+│  │   Code CLI（1 个 agent 1 个 session）            │    │
 │  │   Arch 实例 / Dev 实例 / UAT 实例                  │    │
 │  └──────────────────────────────────────────────────┘    │
 └───────────────────────────────────────────────────────────┘
@@ -171,6 +171,11 @@ user-project/
 │   ├── decision_log.md                # 人类决策和 Agent 经验（Arch + Dev）
 │   ├── actions.jsonl                  # 人和Agent两两沟通（人类 + Arch + Dev + UAT）
 │   └── modules_progress.json          # 整体开发进展（Arch）
+├── cli/                               # scaffold 工具（initWorkspace 拷入）
+│   ├── simulate_human.mjs             # 模拟人类内容生成
+│   ├── logger.mjs                     # UAT 日志
+│   ├── browser.mjs                    # puppeteer-core 封装
+│   └── watchdog.mjs                   # 后台探针
 ├── .team3-project.json                # 项目元数据
 ├── .claude/                           # 本地 claude 配置
 ├── uat/                               # App 维端到端验收脚本（UAT，阶段 2）
@@ -185,33 +190,38 @@ user-project/
 ## 模块拆分
 
 ```
-Module 1: Web UI 交互
-  人类交互界面：对话、编辑 spec、看板、验收 等
+Module 1: Web（team3/web/）
+  人类交互界面：对话、编辑 spec、看板、验收等
+  项目初始化（init-workspace）：目录结构、scaffold 拷贝、Daemon/Agent 启动
 
-Module 2: Web 项目初始化（项目目录结构、Daemon、Agent）
-  定义 Arch、Dev、UAT 的 prompt 模板（含 team3.md 全局说明）
-  初始化项目本地目录结构
-  初始化启动 Daemon 和 各 Agent
+Module 2: Daemon（team3/daemon/）
+  与 Web 互通、与 Code CLI 互通（Provider 抽象，支持 claude code / qodercli 等）
+  调度 Agent（FIFO 消息队列、session 管理）
+  消息转发（actions.jsonl 总线）
+  Code CLI 执行 log 记录
 
-Module 3: Daemon
-  与 Web 互通、与 Claude Code 互通
-  调度 Agent
-  消息转发
-  claude code 执行 log 记录
+Module 3: CLI scaffold（team3/cli/）
+  拷贝到被管理项目的 cli/ 目录，供 Agent（尤其 UAT）直接 import 使用
+  simulate_human.mjs / logger.mjs / browser.mjs / watchdog.mjs / write-action.mjs 等
+
+Module 4: 人类协作方法（team3/human_coding/）
+  tech-stack.md 等跨角色共享的开发约束文档
+  下发到被管理项目根目录，Dev / UAT 都读取遵循
 ```
 
-**模块依赖**：Module 3 是基础，Module 1 和 Module 2 都依赖它
-注：team3 工具自身当前代码放在 `team3/web` 与 `team3/daemon`，这是工具实现目录，不是被管理项目的目录模型。
+**模块依赖**：Module 2 是基础，Module 1 管理 Daemon 生命周期；Module 3 由 Module 1 在初始化时拷贝到项目
+注：以上是 team3 工具自身的子系统划分，不是被管理项目的目录模型。
 
 ## 关键技术思路
 
 ### 如何判断 Agent 一次任务执行成功
 
-claude -p 是非交互模式，任务完成后进程自动退出，"exit code 0 = 成功完成"，--output-format stream-json 可结构化获取输出结果，官方 cli 文档 https://code.claude.com/docs/en/cli-reference
+code cli 非交互模式，任务完成后进程自动退出，"exit code 0 = 成功完成"，--output-format stream-json 可结构化获取输出结果。
 
 ```
-claude -p "query weather ..." --resume "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --output-format stream-json
-# 注：sessionId 必须是合法 uuid，claude code `--session-id` / `--resume` 不接受其它形式
+<cli-command> -p "query weather ..." --resume "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --output-format stream-json
+# 注：sessionId 必须是合法 uuid，`--session-id` / `--resume` 不接受其它形式
+# 具体命令由 Provider 决定（claude / qodercli），详见 app_codecli_fit.md
 ```
 
 ### actions.jsonl 消息定义
@@ -291,34 +301,36 @@ claude -p "query weather ..." --resume "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --
   "workspace": "<绝对路径>",
   "init_workspace": "<初始化目录结构是否成功>",
   "init_daemon": "<daemon 进程 PID>",
+  "daemon_port": "<daemon 监听端口>",
   "daemon_heart": "<最近一次更新时间>",
-  "partner" { //人类 和 Agent 是等同的，一起合作伙伴
+  "partner": {
     "human": {
         "name":"石建",
-        "avtar":"<图像>"
+        "avatar":"<图像>"
     },
     "arch_agent": {
         "name":"张三丰",
-        "avtar":"<图像>",
+        "avatar":"<图像>",
         "session":{
             "runing":"<当前 sessionId>",
-            "done":["", ""] // 历史 session
+            "bound_module":"<当前绑定的 module id，用于上下文裁剪>",
+            "done":["", ""]
         }
     },
     "uat_agent": {
         "name":"白帽",
-        "avtar":"<图像>",
+        "avatar":"<图像>",
         "session":{
             "runing":"<当前 sessionId>",
-            "done":["", ""] // 历史 session
+            "done":["", ""]
         }
     },
     "dev_agent": {
         "name":"多隆",
-        "avtar":"<图像>",
+        "avatar":"<图像>",
         "session":{
             "runing":"<当前 sessionId>",
-            "done":["", ""] // 历史已完成 session
+            "done":["", ""]
         }
     }
   }
@@ -332,7 +344,7 @@ claude -p "query weather ..." --resume "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --
 |----|------|------|
 | **Web**（一个 Next.js 工程） | Next.js (App Router) | / |
 | 本地常驻进程 | Node.js Daemon | / |
-| Agent 执行 | claude code | claude -p 和 --resume 配合 |
+| Agent 执行 | Code CLI（claude code / qodercli 等） | Provider 抽象，`-p` + `--resume` 配合 |
 | 浏览器验证 | Puppeteer | UAT 跑在本地 |
 | 数据存储 | Git 本地文件 | / |
 | CI/CD | 本地脚本 | npm test / pytest，未来 GitHub Actions |

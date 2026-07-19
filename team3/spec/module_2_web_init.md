@@ -10,13 +10,13 @@
 ### agent 拆分和定义
 
 1、拆分定义 Agent，避免单 Agent 混淆过多角色
-- 定义 arch、dev、uat 角色，在系统中定义 agent prompt template，初始化时直接 copy，在项目中可以二次修改
-- `team3.md` — 全局工作流说明（所有角色启动时先读）
+- 定义 arch、dev、uat 角色，prompt 通过 embedded prompts 内联传递（详见 `packaging_design.md`），不再 copy 到项目目录
+- 全局工作流说明已内联在各 agent 的 system prompt 中
 
 2、Arch、Dev、Uat 要求建立项目全局认识
 
 ```
-1. `spec/agents/team3.md` — **必读**，全局工作流和协作规则
+1. system prompt（内联）— 全局工作流和协作规则
 2. `spec/app_design.md` — 产品架构设计
 3. `spec/decision_log.md` — 人类决策记录 + Agent 历史经验教训
 4. `spec/modules_progress.json` — 整体进展总览
@@ -55,7 +55,7 @@
 
 | # | 场景 | 验证要点 |
 |---|------|---------|
-| S1 | 项目初始化本地目录 | `spec/agents/` 出现 team3.md + 三个 prompt 文件 等，遵循 app_design "项目工作目录结构"  |
+| S1 | 项目初始化本地目录 | `spec/`、`cli/`、`uat/`、`logs/` 存在，cli/ 含 scaffold 工具，遵循 app_design "项目工作目录结构"  |
 | S2 | 启动 daemon | 启动成功后，更新 .team3-project.json |
 | S3 | 初始化 Agent | 调用 module3 init_agent 接口返回成功，actions.jsonl 中写入通知人类 arch 在线  |
 | S4 | 验证 Agent，全局知识读取 | 验证每个 Agent 正确读取前置全局知识文件  |
@@ -65,7 +65,7 @@
 
 ## 技术栈
 
-- daemon spawn 启动 Agent 时，通过 `--system-prompt-file` 指向对应 prompt 文件，无其它依赖
+- daemon spawn 启动 Agent 时，通过 `--system-prompt` 内联传递 embedded prompts（详见 `packaging_design.md`）
 - 更新 actions.jsonl：Agent 使用 `cli/write-action.mjs` 写入（格式校验 + 单行保证 + appendFileSync 原子追加），详见 app_stability.md 消息总线写入端约束
 - TODO：decision_log.md 未来需要考虑，人类沟通时特殊性，一个决策发送多条消息、有前后上下文
 

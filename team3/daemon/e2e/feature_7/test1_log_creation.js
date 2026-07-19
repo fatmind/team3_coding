@@ -42,14 +42,7 @@ describe('Feature #7 - Log file creation and stream-json content via REAL claude
     projectJsonPath = path.join(tmpDir, '.team3-project.json');
     specDir = path.join(tmpDir, 'spec');
 
-    // Create spec/agents directory with prompt files
-    fs.mkdirSync(path.join(specDir, 'agents'), { recursive: true });
-    fs.writeFileSync(path.join(specDir, 'agents', 'arch_prompt.md'),
-      '# Arch\n你是测试用 arch agent。收到消息后只回复 "确认收到"，不做任何其他操作。');
-    fs.writeFileSync(path.join(specDir, 'agents', 'dev_prompt.md'),
-      '# Dev\n你是测试用 dev agent。收到消息后只回复 "确认收到"。');
-    fs.writeFileSync(path.join(specDir, 'agents', 'uat_prompt.md'),
-      '# UAT\n你是测试用 uat agent。收到消息后只回复 "确认收到"。');
+    fs.mkdirSync(specDir, { recursive: true });
 
     // Create initial project json with no current arch/uat session.
     fs.writeFileSync(projectJsonPath, JSON.stringify({

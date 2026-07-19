@@ -1,6 +1,6 @@
 # 被开发产品 业务 UAT 重构结论
 
-> 遵循 dynamics/spec/app_design.md 产品设计
+> 遵循 team3/spec/app_design.md 产品设计
 
 ## 已达成共识
 

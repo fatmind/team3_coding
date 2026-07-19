@@ -10,9 +10,9 @@ const EventEmitter = require('events');
 const {
   initAgent,
   generateSessionId,
-  buildClaudeArgs,
   getArchInitPrompt,
 } = require('../src/init-agent');
+const claudeCodeProvider = require('../src/code-cli/claude-code');
 
 describe('init-agent', () => {
   let tmpDir;
@@ -60,9 +60,9 @@ describe('init-agent', () => {
     });
   });
 
-  describe('buildClaudeArgs (re-exported from claude-args.js)', () => {
+  describe('claudeCodeProvider.buildArgs', () => {
     it('should build args with --session-id for new session', () => {
-      const args = buildClaudeArgs({
+      const args = claudeCodeProvider.buildArgs({
         prompt: 'Hello arch',
         sessionId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
         isNew: true,
@@ -79,7 +79,7 @@ describe('init-agent', () => {
     });
 
     it('should build args with --resume for existing session', () => {
-      const args = buildClaudeArgs({
+      const args = claudeCodeProvider.buildArgs({
         prompt: 'Resume task',
         sessionId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
         isNew: false,
@@ -93,7 +93,7 @@ describe('init-agent', () => {
 
     it('should throw when prompt is missing', () => {
       assert.throws(() => {
-        buildClaudeArgs({
+        claudeCodeProvider.buildArgs({
           sessionId: 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
           isNew: true,
           role: 'uat',

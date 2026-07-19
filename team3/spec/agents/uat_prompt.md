@@ -1,1 +1,0 @@
-../../human_coding/uat_prompt.md

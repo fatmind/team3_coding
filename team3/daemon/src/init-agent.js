@@ -5,7 +5,7 @@ const { randomUUID } = require('crypto');
 const path = require('path');
 const ProjectJson = require('./project-json');
 const config = require('./config');
-const { buildClaudeArgs } = require('./claude-args');
+const claudeCodeProvider = require('./code-cli/claude-code');
 
 /**
  * Agent Initializer - Feature #2
@@ -46,6 +46,7 @@ function getArchInitPrompt() {
  * @param {string} [options.specDir] - Path to spec/ directory
  * @param {Function} [options.spawnFn] - Override spawn function (for testing)
  * @param {Function} [options.uuidFn] - Override UUID generator (for testing)
+ * @param {Object} [options.provider] - CodeCli provider instance (from code-cli/)
  * @returns {Promise<Object>} { sessionId, process }
  */
 async function initAgent(role, options = {}) {
@@ -57,6 +58,7 @@ async function initAgent(role, options = {}) {
   const specDir = options.specDir || DEFAULTS.specDir;
   const spawnFn = options.spawnFn || spawn;
   const uuidFn = options.uuidFn || generateSessionId;
+  const provider = options.provider || claudeCodeProvider;
 
   // 1. Generate UUID v4 sessionId
   const sessionId = uuidFn();
@@ -89,30 +91,30 @@ async function initAgent(role, options = {}) {
 
   projectJson.write(data);
 
-  // 3. Build spawn arguments using shared claude-args module
+  // 3. Build spawn arguments using provider
   let prompt = null;
   if (role === 'arch') {
     prompt = getArchInitPrompt();
   }
 
-  const claudeArgs = buildClaudeArgs({
+  const cliArgs = provider.buildArgs({
     prompt: prompt || `你是 ${role} agent，已成功初始化。`,
     sessionId,
     isNew: true,
     role,
   });
 
-  // 4. Spawn claude code process
-  const claudeProcess = spawnFn('claude', claudeArgs, {
+  // 4. Spawn code CLI process
+  const cliProcess = spawnFn(provider.command, cliArgs, {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: { ...process.env },
   });
 
   return {
     sessionId,
-    process: claudeProcess,
+    process: cliProcess,
     role,
-    args: claudeArgs,
+    args: cliArgs,
   };
 }
 
@@ -120,5 +122,4 @@ module.exports = {
   initAgent,
   generateSessionId,
   getArchInitPrompt,
-  buildClaudeArgs,
 };

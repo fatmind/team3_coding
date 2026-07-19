@@ -48,11 +48,7 @@ describe('AgentScheduler', () => {
     modulesProgressPath = path.join(specDir, 'modules_progress.json');
     spawnCalls = [];
 
-    // Create spec/agents directory
-    fs.mkdirSync(path.join(specDir, 'agents'), { recursive: true });
-    fs.writeFileSync(path.join(specDir, 'agents', 'arch_prompt.md'), '# Arch');
-    fs.writeFileSync(path.join(specDir, 'agents', 'dev_prompt.md'), '# Dev');
-    fs.writeFileSync(path.join(specDir, 'agents', 'uat_prompt.md'), '# UAT');
+    fs.mkdirSync(specDir, { recursive: true });
 
     // Create project json with existing sessions
     fs.writeFileSync(projectJsonPath, JSON.stringify({
@@ -293,9 +289,9 @@ describe('AgentScheduler', () => {
     });
   });
 
-  describe('_buildArgs', () => {
+  describe('provider.buildArgs', () => {
     it('should build args with --session-id for new session', () => {
-      const args = scheduler._buildArgs('dev', 'uuid-123', true, 'hello');
+      const args = scheduler.provider.buildArgs({ prompt: 'hello', sessionId: 'uuid-123', isNew: true, role: 'dev' });
       assert.ok(args.includes('-p'));
       assert.ok(args.includes('hello'));
       assert.ok(args.includes('--session-id'));
@@ -306,7 +302,7 @@ describe('AgentScheduler', () => {
     });
 
     it('should build args with --resume for existing session', () => {
-      const args = scheduler._buildArgs('arch', 'uuid-456', false, 'world');
+      const args = scheduler.provider.buildArgs({ prompt: 'world', sessionId: 'uuid-456', isNew: false, role: 'arch' });
       assert.ok(args.includes('-p'));
       assert.ok(args.includes('world'));
       assert.ok(args.includes('--resume'));
@@ -315,7 +311,7 @@ describe('AgentScheduler', () => {
     });
 
     it('should use embedded prompt for role', () => {
-      const args = scheduler._buildArgs('uat', 'uuid-789', false, 'check');
+      const args = scheduler.provider.buildArgs({ prompt: 'check', sessionId: 'uuid-789', isNew: false, role: 'uat' });
       const promptIdx = args.indexOf('--system-prompt');
       assert.ok(promptIdx >= 0, 'should include --system-prompt');
       const promptContent = args[promptIdx + 1];
@@ -742,7 +738,7 @@ describe('AgentScheduler', () => {
 
     it('should recognize real Claude missing-session stderr', () => {
       assert.strictEqual(
-        scheduler._isMissingConversationError('No conversation found with session ID: f47ac10b-58cc-4372-a567-0e02b2c3d479'),
+        scheduler._isMissingConversationError(1, 'No conversation found with session ID: f47ac10b-58cc-4372-a567-0e02b2c3d479', ''),
         true
       );
     });

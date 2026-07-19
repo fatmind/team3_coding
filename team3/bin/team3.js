@@ -105,6 +105,25 @@ function stop() {
   }, 200);
 }
 
+function resolveCliScript(name) {
+  // dev layout: <PKG_DIR>/cli/<name>; packaged layout: <PKG_DIR>/assets/cli/<name>
+  const candidates = [
+    path.join(PKG_DIR, 'cli', name),
+    path.join(PKG_DIR, 'assets', 'cli', name),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || candidates[0];
+}
+
+function init() {
+  const script = resolveCliScript('init.mjs');
+  if (!fs.existsSync(script)) {
+    console.error(`init script not found: ${script}`);
+    process.exit(1);
+  }
+  const child = spawn('node', [script], { stdio: 'inherit' });
+  child.on('exit', (code) => process.exit(code || 0));
+}
+
 function version() {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf-8'));
@@ -118,6 +137,7 @@ function usage() {
   console.log(`Usage: team3 <command> [options]
 
 Commands:
+  init                           Interactively pick a Code CLI and write ~/.team3/config.json
   start [-p PORT] [--superman]   Start team3 web server (default port: ${DEFAULT_PORT})
   stop                           Stop the running server
   version                        Show version
@@ -132,6 +152,9 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 switch (command) {
+  case 'init':
+    init();
+    break;
   case 'start': {
     let port = DEFAULT_PORT;
     const pIdx = args.indexOf('-p');

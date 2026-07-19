@@ -34,14 +34,7 @@ describe('Feature #10 - Scheduler session resolve with REAL claude', { timeout: 
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'f10-real-sched-'));
     specDir = path.join(tmpDir, 'spec');
 
-    // Create spec/agents directory
-    fs.mkdirSync(path.join(specDir, 'agents'), { recursive: true });
-    fs.writeFileSync(path.join(specDir, 'agents', 'arch_prompt.md'),
-      '# Arch Agent\n你是测试用 arch agent。收到消息后只回复 "确认收到"，不做任何其他操作。');
-    fs.writeFileSync(path.join(specDir, 'agents', 'uat_prompt.md'),
-      '# UAT Agent\n你是测试用 uat agent。收到消息后只回复 "确认收到"。');
-    fs.writeFileSync(path.join(specDir, 'agents', 'dev_prompt.md'),
-      '# Dev Agent\n你是测试用 dev agent。收到消息后只回复 "确认收到"。');
+    fs.mkdirSync(specDir, { recursive: true });
   });
 
   after(() => {

@@ -198,37 +198,29 @@ claude
 
 ## 源码 zip 打包（git archive）
 
-只打 git 已跟踪文件，自动跳过 `node_modules`、`.next`、`dist`、`pkg`、`embedded-prompts.js` 等编译/废弃产物。
-
-**会打进包的关键目录**：`bin/`、`build/`、`cli/`、`daemon/`、`web/`、`human_coding/`、`spec/`（均在 git 中，不是本地临时文件）。
+只打 git 已跟踪文件（`example/` 等已被 `.gitignore` 忽略，不会进包）。
+- **会打进包**：顶层目录 `draft/`、`team3/`，以及 `.gitignore`。
+- **`team3/` 关键目录**：包含 `bin/`、`build/` 等关键子目录，跳过 `node_modules`、`.next`、`embedded-prompts.js` 等编译后产物。
 
 ### 打包
 
-在 **仓库根目录**（`team_coding3/`，不是 `team3/`）执行：
+在 **仓库根目录**（`team_coding3/`）执行：
 
 ```bash
 cd team_coding3
-git archive --format=zip --prefix=team3/ HEAD:team3 -o team3-src.zip
+git archive --format=zip HEAD -o team_coding3.zip
 ```
 
-> **注意**：必须是 `HEAD:team3`，不能只写 `HEAD`。若写成 `HEAD`，`build/`、`cli/` 会落到 `team3/team3/build/` 等嵌套路径，解压后 `cd team3` 会看不到它们。
-
-产出 `team3-src.zip`（约 4MB），解压后顶层为 `team3/`，其下直接有 `build/`、`cli/` 等。
-
-### 打包后自检
-
-```bash
-unzip -l team3-src.zip | grep -E 'team3/(build|cli|bin)/'
-# 应看到 team3/build/build.sh、team3/cli/*.mjs、team3/bin/team3.js 等
-```
+产出 `team_coding3.zip`，解压后顶层为 `.gitignore`，以及并列的 `draft/` 与 `team3/`。
 
 ### 收包方首次使用
 
 ```bash
-unzip team3-src.zip
+unzip team_coding3.zip
+ls .gitignore draft team3   # 确认根文件与两个顶层目录都在
 cd team3
-ls build cli bin          # 确认三者存在
+ls build cli bin            # 确认三者存在
 npm install --prefix web && npm install --prefix daemon
-node build/embed-prompts.js      # 生成 daemon/src/embedded-prompts.js
-cd web && npm run dev            # http://localhost:3000
+node build/embed-prompts.js        # 生成 daemon/src/embedded-prompts.js
+cd web && npm run dev              # http://localhost:3000
 ```

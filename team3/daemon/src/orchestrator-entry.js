@@ -24,6 +24,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const DaemonOrchestrator = require('./daemon-orchestrator');
 const config = require('./config');
+const { loadCodeCliConfig, loadProvider } = require('./code-cli');
 
 // Resolve paths
 const projectJsonPath = process.env.TEAM3_PROJECT_JSON || config.projectJsonPath;
@@ -32,12 +33,23 @@ const actionsFilePath = process.env.TEAM3_ACTIONS_PATH || path.join(workspaceDir
 const specDir = process.env.TEAM3_SPEC_DIR || path.join(workspaceDir, 'spec');
 const modulesProgressPath = path.join(specDir, 'modules_progress.json');
 
+// Load CodeCli provider from ~/.team3/config.json
+let provider;
+try {
+  const codeCliConfig = loadCodeCliConfig();
+  provider = loadProvider(codeCliConfig);
+  console.log(`[Orchestrator] CodeCli provider: ${provider.name} (${provider.command})`);
+} catch (err) {
+  console.error(`[Orchestrator] Failed to load CodeCli config: ${err.message}`);
+  console.error('[Orchestrator] Falling back to claude-code provider');
+  provider = require('./code-cli/claude-code');
+}
+
 // Build spawnFn if STUB_CLAUDE_PATH is set
 let spawnFn;
 if (process.env.STUB_CLAUDE_PATH) {
   const stubPath = process.env.STUB_CLAUDE_PATH;
   spawnFn = (cmd, args, opts) => {
-    // Replace 'claude' command with 'node <stub-path>'
     return spawn('node', [stubPath, ...args], {
       ...opts,
       env: {
@@ -57,6 +69,7 @@ const orchestrator = new DaemonOrchestrator({
   specDir,
   modulesProgressPath,
   spawnFn,
+  provider,
 });
 
 orchestrator.start().then(() => {
@@ -64,7 +77,7 @@ orchestrator.start().then(() => {
   console.log(`[Orchestrator] Watching: ${actionsFilePath}`);
   console.log(`[Orchestrator] Spec dir: ${specDir}`);
   if (process.env.STUB_CLAUDE_PATH) {
-    console.log(`[Orchestrator] Using stub-claude: ${process.env.STUB_CLAUDE_PATH}`);
+    console.log(`[Orchestrator] Using stub: ${process.env.STUB_CLAUDE_PATH}`);
   }
 }).catch((err) => {
   console.error(`[Orchestrator] Failed to start: ${err.message}`);

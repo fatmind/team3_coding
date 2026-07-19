@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# init.sh — team3 业务项目启动脚本（模板）
+#
+# 遵循 ./tech-stack.md（harness 下发到项目根）的硬约束：
+#   1. 启动前 env -u 清理父进程污染
+#   2. 端口 3001 写死，不读 PORT 环境变量
+#   3. start|stop|restart 三个子命令
+#   4. PID 文件管理，stop 只关 PID 里的进程
+#   5. 端口被占用且非本项目 PID → 报错退出，不自动 kill
+#   6. 7001/9001 是 team3 保留端口，禁止使用
+#   7. npm install --include=dev --prefer-offline
+#
+# 用法：
+#   ./init.sh           # 启动（默认）
+#   ./init.sh start     # 同上
+#   ./init.sh stop      # 关闭（只关 PID 里的进程）
+#   ./init.sh restart   # stop + start
+
+set -euo pipefail
+
+# ---- 业务端口（写死，不读 PORT）----
+APP_DEV_PORT=3001
+
+# ---- 保留端口（业务项目禁止使用）----
+TEAM3_WEB_PORT=7001
+TEAM3_START_PORT=9001
+
+# ---- PID / 日志文件----
+PID_FILE=".pids/dev.pid"
+LOG_DIR="logs"
+LOG_FILE="${LOG_DIR}/dev.log"
+
+# ---- 父进程污染清理（tech-stack.md §2）----
+# 这些变量被父进程/daemon 泄漏到子进程会污染 next dev：
+#   __NEXT_PRIVATE_STANDALONE_CONFIG — 父 next.config 路径
+#   __NEXT_PRIVATE_ORIGIN — 父 origin
+#   NEXT_DEPLOYMENT_ID — 父 deployment id
+#   TURBOPACK=1 — 与 --webpack 冲突
+#   NODE_PATH — 模块路径污染
+#   NODE_ENV — 父可能为 production 导致 npm install 跳过 devDeps
+CLEAN_ENV=(env -u __NEXT_PRIVATE_STANDALONE_CONFIG \
+              -u __NEXT_PRIVATE_ORIGIN \
+              -u NEXT_DEPLOYMENT_ID \
+              -u TURBOPACK \
+              -u NODE_PATH)
+
+# ---- 工具函数----
+log() { echo "[init.sh] $*"; }
+fail() { log "ERROR: $*" >&2; exit 1; }
+
+check_port_free() {
+  local port=$1
+  local pids
+  pids=$(lsof -ti:"${port}" 2>/dev/null || true)
+  if [[ -n "${pids}" ]]; then
+    return 1  # 占用
+  fi
+  return 0  # 空闲
+}
+
+read_pid() {
+  if [[ -f "${PID_FILE}" ]]; then
+    cat "${PID_FILE}"
+  fi
+}
+
+is_alive() {
+  local pid=$1
+  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+# ---- start ----
+cmd_start() {
+  log "starting on port ${APP_DEV_PORT}"
+
+  # 1. 检查端口（必须空闲，或被当前项目自己的 PID 占用）
+  if ! check_port_free "${APP_DEV_PORT}"; then
+    local existing_pids
+    existing_pids=$(lsof -ti:"${APP_DEV_PORT}" 2>/dev/null || true)
+    local my_pid
+    my_pid=$(read_pid || true)
+    if [[ -n "${my_pid}" ]] && echo "${existing_pids}" | grep -qw "${my_pid}"; then
+      log "port ${APP_DEV_PORT} already held by current project PID ${my_pid}"
+    else
+      fail "port ${APP_DEV_PORT} 已被占用（PID: ${existing_pids}），不是本项目进程；禁止自动 kill，请人工处理"
+    fi
+  fi
+
+  # 2. 装依赖（幂等）
+  if [[ ! -d "node_modules" ]] || [[ "package.json" -nt "node_modules" ]]; then
+    log "installing dependencies (--include=dev --prefer-offline)"
+    npm install --include=dev --prefer-offline
+  fi
+
+  # 3. 准备目录
+  mkdir -p "$(dirname "${PID_FILE}")" "${LOG_DIR}"
+
+  # 4. 启动（带 env 清理 + 显式 NODE_ENV=development + 显式禁用 TURBOPACK）
+  NODE_ENV=development TURBOPACK= nohup "${CLEAN_ENV[@]}" \
+    npx next dev --port "${APP_DEV_PORT}" --webpack \
+    >"${LOG_FILE}" 2>&1 &
+  local pid=$!
+  echo "${pid}" > "${PID_FILE}"
+  log "started, pid=${pid}, log=${LOG_FILE}"
+
+  # 5. 等就绪（最多 60s）
+  local i
+  for i in {1..60}; do
+    if curl -sf "http://localhost:${APP_DEV_PORT}" >/dev/null 2>&1; then
+      log "ready at http://localhost:${APP_DEV_PORT} (${i}s)"
+      return 0
+    fi
+    sleep 1
+  done
+  log "WARNING: not ready in 60s, check ${LOG_FILE}"
+}
+
+# ---- stop ----
+cmd_stop() {
+  local pid
+  pid=$(read_pid || true)
+  if [[ -z "${pid}" ]]; then
+    log "no pid file, nothing to stop"
+    return 0
+  fi
+  if ! is_alive "${pid}"; then
+    log "pid ${pid} not alive, removing stale pid file"
+    rm -f "${PID_FILE}"
+    return 0
+  fi
+  log "stopping pid ${pid}"
+  kill "${pid}" || true
+  # 等最多 10s 优雅退出
+  local i
+  for i in {1..10}; do
+    if ! is_alive "${pid}"; then
+      rm -f "${PID_FILE}"
+      log "stopped"
+      return 0
+    fi
+    sleep 1
+  done
+  # 兜底：kill -9（仅限 PID 文件里的进程，绝不扩大范围）
+  log "pid ${pid} not exiting gracefully, sending SIGKILL"
+  kill -9 "${pid}" 2>/dev/null || true
+  rm -f "${PID_FILE}"
+}
+
+# ---- restart ----
+cmd_restart() {
+  cmd_stop
+  cmd_start
+}
+
+# ---- main ----
+case "${1:-start}" in
+  start)   cmd_start ;;
+  stop)    cmd_stop ;;
+  restart) cmd_restart ;;
+  *)
+    cat <<EOF
+Usage: $0 [start|stop|restart]
+
+端口: ${APP_DEV_PORT}（固定）
+PID:  ${PID_FILE}
+日志: ${LOG_FILE}
+EOF
+    exit 1
+    ;;
+esac

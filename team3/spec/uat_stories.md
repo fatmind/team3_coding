@@ -13,7 +13,7 @@
 
 **2、验证**
 - 页面跳转到 Page 1（主工作台），左侧群聊区和右侧文档展示区正常渲染，无报错
-- 本地文件系统创建完整骨架：`spec/agents/` 目录出现 `team3.md`、`arch_prompt.md`、`dev_prompt.md`、`uat_prompt.md`；`.team3-project.json` 文件存在且 `init_workspace` 字段标记为成功
+- 本地文件系统创建完整骨架：`spec/`、`cli/`、`uat/`、`logs/` 目录存在；`.team3-project.json` 文件存在且 `init_workspace` 字段标记为成功
 
 #### 场景2 Daemon 启动与 Arch Agent 上线
 **1、步骤**

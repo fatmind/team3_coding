@@ -11,7 +11,7 @@
 ### Agent 调度模型
 
 - 每个 Agent 一个独立的 FIFO 消息队列：单 Agent 串行，上一次 claude 进程未退出前，新消息进队列等待，执行时一次性合并入 prompt（多条消息拼接，顺序保持）
-    - TODO：人类消息 "中断运行、提前插入" 机制，本期不做
+    - 人类消息中断运行机制：已实现，详见 `app_credibility.md` [关键技术方案 1]
 - 同一个 Agent 不并发，不同 Agent 间并行（Arch / Dev / UAT 各自独立队列、独立执行）
 - Agent 和 claude code session 关系
     - arch：见 @spec/module_4_hardening.md [问题 2]
@@ -36,13 +36,7 @@
 
 - 详见 module_1 <群聊数据流>
 - daemon 与 web 间：通过 ws 通信
-- daemon 与 claude code 间：通过 bash 命令通信
-```bash
-# 新 sessionId → 创建（sessionId 必须是 uuid）
-claude -p "..." --session-id "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --system-prompt-file spec/agents/arch_prompt.md --output-format stream-json
-# 已存在的 sessionId → resume
-claude -p "..." --resume "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --system-prompt-file spec/agents/arch_prompt.md --output-format stream-json
-```
+- daemon 与 code CLI 间：通过 code-cli provider 构建参数并 spawn 子进程（详见 `app_codecli_fit.md`），system prompt 内联传递（详见 `packaging_design.md`）
 - 监测 actions.jsonl 变化，转发消息
     - daemon 是 actions.jsonl 的 reader+router，仅在 dead letter / reply fallback / validation-error 时通过 appendFileSync 写入（详见 @spec/app_stability.md [消息总线写入端约束]）
     - web（人类）或 Agent 消息写入 actions.jsonl → chokidar 监测到新行 → 解析、入对应 Agent 队列 → 调度 spawn claude
@@ -85,7 +79,7 @@ claude -p "..." --resume "b9f7e67b-6fa2-47ed-91d3-3d9b4c9b8ea3" --system-prompt-
 - `.daemon-state.json` 位置：`path.join(workspaceDir, '.daemon-state.json')`
 - agent 日志目录：`path.join(workspaceDir, 'logs')`
 
-**启动清理补充**：除通用孤儿清理（@spec/app_stability.md [孤儿进程清理]）外，额外检查 `dev_agent.session.done[]`——已归档 session 对应的进程仍存活 → SIGTERM 关闭。运行时 PID 追踪：AgentScheduler 每次 spawn 记录到 `spawnedPids`，进程退出时移除。
+**启动清理补充**：除通用孤儿清理（@spec/app_stability.md [孤儿进程清理]）外，额外检查 `dev_agent.session.done[]`——已归档 session 对应的进程仍存活 → SIGTERM 关闭。`spawnedPids` 已移除（详见 `app_stability.md` §7）。
 
 #### 二、Agent 监控
 

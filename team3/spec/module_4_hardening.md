@@ -6,7 +6,7 @@
 
 ## 范围
 
-5 个改进项，详细问题分析和产品思路见 @spec/app_design_v2.md 对应章节
+5 个改进项，详细问题分析和产品思路见 @spec/app_credibility.md 对应章节
 
 ## 跨工程约束
 
@@ -16,13 +16,13 @@
 
 ### 1. 问题 3：Agent 执行中无法打断、插入最新要求 [重点][done]
 
-产品思路和技术方案见 @spec/app_design_v2.md [关键技术方案 1]。
+产品思路和技术方案见 @spec/app_credibility.md [关键技术方案 1]。
 注：已实现，待验收。
 
 
 ### 2. 问题 1：e2e 每次全量跑，验收越来越慢 [重点][done]
 
-产品思路见 @spec/app_design_v2.md [问题 1]。
+产品思路见 @spec/app_credibility.md [问题 1]。
 
 **技术细节**：
 - `feature_list.json` 新增 `depends_on` 字段（feature id 数组）
@@ -36,7 +36,7 @@
 
 ### 3. 问题 6：UAT 黑盒约束未落地，失败后缺少自查 [重点][done]
 
-产品思路见 @spec/app_design_v2.md [问题 6]。
+产品思路见 @spec/app_credibility.md [问题 6]。
 
 **现状**：uat 缺少代码强检查证据，且 Story 失败就直接找人，不会先自查、分不清脚本问题还是产品问题。
 **原则**：代码只校验 uat 证据「有没有」，UAT agent 自己判断结果、自己修脚本，daemon / web / agent 都是产品问题。
@@ -130,9 +130,9 @@ uat_check（指定 Story N）→ 读 state → 只跑 story_N
 
 ---
 
-### 4. 问题 5：新项目 UX/UI 质量不稳定 [重点]
+### 4. 问题 5：新项目 UX/UI 质量不稳定 [重点][done]
 
-产品思路见 @spec/app_design_v2.md [问题 5]。UI 设计原则见 @spec/app_ux_awesome.md，复杂 UI 原型生成与合并见 @spec/app_ux_prototype.md。
+产品思路见 @spec/app_credibility.md [问题 5]。UI 设计原则见 @spec/app_ux_awesome.md，复杂 UI 原型生成与合并见 @spec/app_ux_prototype.md。
 
 **技术细节**：
 
@@ -200,7 +200,7 @@ Dev 在 STEP 2 跑完 init.sh 后执行上述命令。**Arch 不执行 CLI，Dae
 
 ### 5. 问题 2：Arch 上下文持续累积，缺裁剪 [重点][done]
 
-产品思路见 @spec/app_design_v2.md [问题 2]。
+产品思路见 @spec/app_credibility.md [问题 2]。
 
 **`.team3-project.json`**：`arch_agent.session.bound_module`（`null` 或 module id）。
 

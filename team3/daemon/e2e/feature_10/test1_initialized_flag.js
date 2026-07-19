@@ -33,12 +33,7 @@ describe('Feature #10 - init_agent session creation with REAL claude', { timeout
     projectJsonPath = path.join(tmpDir, '.team3-project.json');
     specDir = path.join(tmpDir, 'spec');
 
-    // Create spec/agents directory with prompt files
-    fs.mkdirSync(path.join(specDir, 'agents'), { recursive: true });
-    fs.writeFileSync(path.join(specDir, 'agents', 'arch_prompt.md'),
-      '# Arch Agent\n你是测试用 arch agent。收到消息后只回复 "确认收到"，不做任何其他操作。');
-    fs.writeFileSync(path.join(specDir, 'agents', 'uat_prompt.md'),
-      '# UAT Agent\n你是测试用 uat agent。收到消息后只回复 "确认收到"。');
+    fs.mkdirSync(specDir, { recursive: true });
 
     // Create minimal .team3-project.json
     fs.writeFileSync(projectJsonPath, JSON.stringify({

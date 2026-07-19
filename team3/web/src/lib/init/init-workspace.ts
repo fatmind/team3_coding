@@ -15,6 +15,12 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+// this file: team3/web/src/lib/init/init-workspace.ts
+// team3 root: ../../../..  (init -> lib -> src -> web -> team3)
+const TEAM3_ROOT = path.resolve(path.dirname(__filename), "..", "..", "..", "..");
 
 export interface Team3ProjectJson {
   name: string;
@@ -146,8 +152,30 @@ function getCliSourceDir(): string {
   if (process.env.TEAM3_PKG_DIR) {
     return path.join(process.env.TEAM3_PKG_DIR, "assets", "cli");
   }
-  return path.join(/* turbopackIgnore: true */ process.cwd(), "..", "cli");
+  return path.join(TEAM3_ROOT, "cli");
 }
+
+/**
+ * Resolve team3/ source directory (sibling of web/, parent of cli/).
+ * Used to copy human_coding/tech-stack.md and cli/init.sh.template into new projects.
+ */
+function getTeam3SourceDir(): string {
+  if (process.env.TEAM3_PKG_DIR) {
+    return process.env.TEAM3_PKG_DIR;
+  }
+  return TEAM3_ROOT;
+}
+
+/**
+ * Scaffold files copied from team3/ source into the new project root.
+ * - tech-stack.md: Next.js / env cleanup / deps policy (single source of truth)
+ * - init.sh: from cli/init.sh.template, renamed to init.sh and chmod +x
+ */
+const SCAFFOLD_FILES: { source: string; dest: string; executable?: boolean }[] = [
+  { source: "human_coding/tech-stack.md", dest: "tech-stack.md" },
+  { source: "human_coding/html-prototype-trans-template.md", dest: "html-prototype-trans-template.md" },
+  { source: "cli/init.sh.template", dest: "init.sh", executable: true },
+];
 
 function writeIfNotExists(filePath: string, content: string): void {
   if (fs.existsSync(filePath)) {
@@ -156,6 +184,15 @@ function writeIfNotExists(filePath: string, content: string): void {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(filePath, content, "utf-8");
+  const stat = fs.statSync(filePath);
+  // Best-effort executable bit (used for init.sh template)
+  if ((stat.mode & 0o111) === 0) {
+    try {
+      fs.chmodSync(filePath, 0o755);
+    } catch {
+      // Ignore on platforms/filesystems that don't support chmod
+    }
+  }
 }
 
 /**
@@ -182,6 +219,21 @@ export function initWorkspace(workspacePath: string): void {
     const dest = path.join(cliDest, file);
     if (fs.existsSync(src)) {
       writeIfNotExists(dest, fs.readFileSync(src, "utf-8"));
+    }
+  }
+
+  // Copy team3/ scaffold (human_coding/tech-stack.md, cli/init.sh.template)
+  const team3Src = getTeam3SourceDir();
+  for (const { source, dest, executable } of SCAFFOLD_FILES) {
+    const src = path.join(team3Src, source);
+    const target = path.join(absPath, dest);
+    if (fs.existsSync(src) && !fs.existsSync(target)) {
+      const content = fs.readFileSync(src, "utf-8");
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content, "utf-8");
+      if (executable) {
+        try { fs.chmodSync(target, 0o755); } catch { /* ignore */ }
+      }
     }
   }
 
