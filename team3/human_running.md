@@ -200,7 +200,7 @@ claude
 
 只打 git 已跟踪文件（`example/` 等已被 `.gitignore` 忽略，不会进包）。
 - **会打进包**：顶层目录 `draft/`、`team3/`，以及 `.gitignore`。
-- **`team3/` 关键目录**：包含 `bin/`、`build/` 等关键子目录，跳过 `node_modules`、`.next`、`embedded-prompts.js` 等编译后产物。
+- 跳过 `node_modules`、`.next`、`embedded-prompts.js` 等编译后产物。
 
 ### 打包
 
@@ -211,16 +211,18 @@ cd team_coding3
 git archive --format=zip HEAD -o team_coding3.zip
 ```
 
-产出 `team_coding3.zip`，解压后顶层为 `.gitignore`，以及并列的 `draft/` 与 `team3/`。
-
-### 收包方首次使用
+### 使用
 
 ```bash
+# 确认文件
 unzip team_coding3.zip
-ls .gitignore draft team3   # 确认根文件与两个顶层目录都在
+ls .gitignore draft team3   
+# 安装依赖
 cd team3
-ls build cli bin            # 确认三者存在
 npm install --prefix web && npm install --prefix daemon
-node build/embed-prompts.js        # 生成 daemon/src/embedded-prompts.js
-cd web && npm run dev              # http://localhost:3000
+# build
+bash build/build.sh
+npm install -g ./pkg/team3-*.tgz
+# 启动 http://localhost:9001
+team3 start -p 9001
 ```

@@ -1,0 +1,9 @@
+{
+  "name": "team3",
+  "version": "1.0.2",
+  "private": true,
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "javascript-obfuscator": "^5.5.0"
+  }
+}

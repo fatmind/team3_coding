@@ -4,6 +4,12 @@ set -euo pipefail
 TOOL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 echo "==> Building team3 from $TOOL_DIR"
 
+# 0. Install root devDependencies (esbuild, javascript-obfuscator)
+echo "--- Step 0: Install root deps"
+cd "$TOOL_DIR"
+npm install --silent
+cd "$TOOL_DIR"
+
 # 1. Embed prompts into daemon
 echo "--- Step 1: Embed prompts"
 node "$TOOL_DIR/build/embed-prompts.js"
@@ -41,7 +47,13 @@ cp "$TOOL_DIR/bin/team3.js" "$TOOL_DIR/pkg/bin/"
 chmod +x "$TOOL_DIR/pkg/bin/team3.js"
 
 # Next.js standalone output (use "." to include dotfiles like .next/)
-cp -a "$TOOL_DIR/web/.next/standalone/." "$TOOL_DIR/pkg/server/"
+# Next.js 16 nests under project dir name (e.g. standalone/web/), find server.js
+STANDALONE_ROOT=$(find "$TOOL_DIR/web/.next/standalone" -maxdepth 2 -name "server.js" -exec dirname {} \; | head -1)
+if [ -z "$STANDALONE_ROOT" ]; then
+  echo "ERROR: server.js not found in .next/standalone"
+  exit 1
+fi
+cp -a "$STANDALONE_ROOT/." "$TOOL_DIR/pkg/server/"
 if [ -d "$TOOL_DIR/web/.next/static" ]; then
   mkdir -p "$TOOL_DIR/pkg/server/.next/static"
   cp -a "$TOOL_DIR/web/.next/static/." "$TOOL_DIR/pkg/server/.next/static/"

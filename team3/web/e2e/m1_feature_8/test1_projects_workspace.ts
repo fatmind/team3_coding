@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import puppeteer, { type Browser, type Page } from "puppeteer";
+import { launchBrowser, type Browser, type Page } from "../_browser";
 
 const BASE_URL = "http://127.0.0.1:3000";
 const API = (route: string) => `${BASE_URL}${route}`;
@@ -105,10 +105,7 @@ beforeAll(async () => {
   );
 
   // Launch browser
-  browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  browser = await launchBrowser();
   page = await browser.newPage();
 }, 30000);
 

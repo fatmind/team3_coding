@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -30,7 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "jsdom": "^29.1.1",
-    "puppeteer": "^25.0.4",
+    "puppeteer-core": "^25.0.4",
     "typescript": "^5",
     "vitest": "^4.1.7"
   }

@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, ChildProcess } from "node:child_process";
 import * as path from "node:path";
-import puppeteer, { Browser, Page } from "puppeteer";
+import { launchBrowser, type Browser, type Page } from "../_browser";
 
 const WEB_DIR = path.resolve(__dirname, "../../");
 const PORT = 3093;
@@ -50,10 +50,7 @@ describe("Module 1 Feature #6: Page 2 工作项关系图 + Page 3 timeline", () 
     await waitForServer(`${BASE_URL}/health`);
 
     // Launch browser
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    browser = await launchBrowser();
     page = await browser.newPage();
   }, 60000);
 

@@ -1,79 +1,60 @@
-# ---------- Node.js ----------
+.cursor/
+.qoder/
+.claude/
+example/
+team3/web/.test-arch-verify/
+
+# Dependencies
 node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Production build artifacts (except team3/build/ which is source)
+dist/
+
+# Packaging artifacts
+team3/daemon/src/embedded-prompts.js
+team3/pkg/
+team3-src*.zip
+
+# Logs
+*.log
+# daemon 运行时日志目录（运行时自动创建）
+team3/daemon/logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
-.npm
-.pnpm-store/
-.yarn/cache
-.yarn/install-state.gz
 
-# ---------- 构建产物 ----------
-dist/
-out/
-pkg/
-*.tsbuildinfo
-# build/embed-prompts.js 的生成物
-team3/daemon/src/embedded-prompts.js
-
-# ---------- Next.js ----------
-.next/
-next-env.d.ts
-
-# ---------- 环境变量 / 私密文件 ----------
+# Environment variables
 .env
-.env.*
-!.env.example
-*.pem
-*.key
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# ---------- 日志 / 运行时 ----------
-logs/
-*.log
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# ---------- 测试 / 覆盖率 ----------
+# Coverage
 coverage/
-.nyc_output/
-.vitest-cache/
-playwright-report/
-test-results/
-e2e-results/
 
-# ---------- 缓存 ----------
-.cache/
-.parcel-cache/
-.eslintcache
-.stylelintcache
+# Turborepo
 .turbo/
-.swc/
 
-# ---------- IDE / 编辑器 ----------
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Vercel
+.vercel/
 
-# ---------- macOS ----------
+# OS / Editor
 .DS_Store
-.AppleDouble
-.LSOverride
-Icon?
-._*
+.idea/
 
-# ---------- Windows ----------
-Thumbs.db
-ehthumbs.db
-Desktop.ini
+# StyleSeed cache (init-ui-rules CLI)
+team3/.cache/
 
-# ---------- 项目本地 ----------
-.claude/
-tmp/
-temp/
-*.local
+# extract.mjs 增量状态（per-machine，含用户绝对路径）
+team3/loop/.extract-state.json
+
+# example/ debug sandboxes (keep human_distillation only)
+example/*
+!example/human_distillation/
+!example/human_distillation/**
