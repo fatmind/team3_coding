@@ -29,21 +29,9 @@
     ↓
 人类 + Arch 拆 module → 每个写入 spec/module_X.md
     ↓
-人类 确认：发两条消息 "module 设计完毕 @Arch" 、"开始 uat_design @Uat" 
+人类 确认："module 设计完毕 @Arch"
 
-======== 多个 Agent 自主并行推进 ========
-
-=== UAT 阶段 1：设计用户故事（并行 1） ===
-
-Daemon 转发给 Uat
-  ↓
-UAT 读 app_design.md + 所有 module_X.md → 写 spec/uat_stories.md（按用户故事验证产品功能）
-  ↓
-人类 review stories，和 UAT 对话修改
-  ↓
-人类 确认 uat_stories，等待开发完成
-
-=== Arch 和 Dev 开发（并行 2） ===
+======== Arch 和 Dev 开发（Agent 自主推进）========
 
 Daemon 转发给 Arch
     ↓
@@ -63,33 +51,50 @@ Arch 验收 → 更新 feature_list.json + 更新 progress.txt + 更新 modules_
           → dev_do: 验收通过，请实现下一个 ...
           → to_human: 验收通过 Feature #N，开始下一个 ...
     ↓
-module 所有 feature 完成 → Arch 写: "to_arch: module_x 已开发完，请开始下一个 module feature 拆解"
+（人类过程中给 Dev 补充信息 → @Dev 一句话 → to_dev 直达，Dev 同 session 吸收继续，不重开任务）
     ↓
-Arch 开始下一轮工作 → 拆解 module_x feature，写 feature_list.json + progress.txt
-                  → dev_do: 请实现 Feature #N ...
+module 所有 feature 完成 → 全量 e2e 回归 → 开始下一个 module feature 拆解
 ...
     ↓
-所有 module 完成 -> Arch 写: "uat_check: 所有 module 已开发完和验收，请开始用户故事的验证"
+所有 module 完成 + 回归通过 → Arch 发 uat_design: "所有 module 已开发完和验收，请设计用户故事"
 
-=== UAT 阶段 2：验证用户故事 ===
+======== UAT 阶段 1：设计用户故事（开发完成后串行，考卷须人批准生效）========
 
 Daemon 转发给 Uat
+  ↓
+UAT 读 app_design.md + 所有 module_X.md → 写 spec/uat_stories.md
+（信息隔离：只从设计文档推导，不跑产品、不看实现——防"对着答案出题"）
+  ↓
+UAT to_human 请人类 review
+  ↓
+人类不通过 → @Uat 修改意见（to_uat 直达，UAT 同 session 改稿再请审，循环）
+人类通过   → 告知 Arch（"stories 确认了，开始验收"）
+  ↓
+Arch 发 uat_check（一次开考令）
+
+======== UAT 阶段 2：验证用户故事 ========
+
+Daemon 转发给 Uat（新 session，只认 uat_stories.md 定稿）
   ↓
 UAT 读 spec/uat_stories.md（注：黑盒验证，不读 Dev 代码 / feature_list / progress） 
   ↓
 UAT 在 uat/ 下写 story 验证脚本（跨 module 串联用户故事，从用户角度独立验证）
   ↓
-UAT 全自动执行
+UAT 全自动执行：全量逐 Story 依序验收，自管队列（uat/state.json）
   ↓
-全部通过 → to_human : 产品 UAT 验收通过 + spec/uat_report.md
-失败 → 先自查、找 arch 解决 → 3 轮没搞定，再 to_human 通知人类
+全部跑完（无论 pass/fail）→ to_arch 总汇报（任务完成标志）
+  ├── 全部通过 → Arch to_human: 产品验收通过 N/M + spec/uat_report.md
+  ├── 有 product_issue → Arch 派 Dev 修复 → uat_fix 重验失败 Story
+  └── 某 Story 3 轮仍失败 → UAT to_human 请人类拍板
 
 ======== 人类轻度投入（验收阶段）========
 
-人类在 Web 群聊收到 UAT 完成通知，查看 spec/uat_report.md
+人类在 Web 群聊收到验收通知，查看 spec/uat_report.md
     ├── OK → 项目完成
-    └── 不 OK → 在群聊补充人类决策，@Arch 解决 UAT 失败问题 → Arch 走 MODE C 处理
+    └── 不 OK → 在群聊补充人类决策，@Arch 解决 UAT 失败问题
 ```
+
+> 沟通通道说明：人类对三个 Agent 均有平等的纯消息通道（to_arch / to_dev / to_uat，仅人类可发），说话不改变对方 session 和任务；派活（dev_do / uat_design / uat_check）是 Arch 的调度职责。关键产物有生效关卡：代码经 Arch 验收，uat_stories 经人类批准。
 
 ## 架构思路：纯本地三件套
 
@@ -139,7 +144,8 @@ UAT 全自动执行
 - Dev 的交付报告 → 写入 `spec/*_progress.txt`
 - UAT 设计产品故事（阶段 1）→ 写入 `spec/uat_stories.md`
 - UAT 验证用户故事（阶段 2）→ 写入 `spec/uat_report.md`
-- 人类决策和 Agent 经验 → 写入 `spec/decision_log.md`
+- 人类决策 → 写入 `spec/decisions.md`（只放生效决策，一条一行）
+- Agent 经验教训 → 写入 `spec/experience.md`（固定字段：问题/原因/应该咋做/ref）
 - 人和Agent两两沟通 → 写入 `spec/actions.jsonl`
 
 文件是 Source of Truth，**且不引入数据库**。
@@ -168,16 +174,18 @@ user-project/
 │   ├── module_X_progress.txt          # 开发进度跟踪（Arch + Dev）
 │   ├── uat_stories.md                 # 产品用户故事（UAT，阶段 1）
 │   ├── uat_report.md                  # 产品验收报告（UAT，阶段 2）
-│   ├── decision_log.md                # 人类决策和 Agent 经验（Arch + Dev）
+│   ├── decisions.md                   # 生效的人类决策（人类 + Agent 记录）
+│   ├── experience.md                  # Agent 经验教训（Arch + Dev + UAT）
 │   ├── actions.jsonl                  # 人和Agent两两沟通（人类 + Arch + Dev + UAT）
 │   └── modules_progress.json          # 整体开发进展（Arch）
 ├── cli/                               # scaffold 工具（initWorkspace 拷入）
+│   ├── write-action.mjs               # actions.jsonl 唯一写入口（含 to_human 判卷）
+│   ├── experience.mjs                 # 经验库只读索引/详情
 │   ├── simulate_human.mjs             # 模拟人类内容生成
 │   ├── logger.mjs                     # UAT 日志
 │   ├── browser.mjs                    # puppeteer-core 封装
-│   └── watchdog.mjs                   # 后台探针
+│   └── ...                            # validate-uat-evidence / init-ui-rules 等
 ├── .team3-project.json                # 项目元数据
-├── .claude/                           # 本地 claude 配置
 ├── uat/                               # App 维端到端验收脚本（UAT，阶段 2）
 │   └── story_N                        # 一个 story 一个目录
 ├── init.sh                            # 环境启动脚本（Dev 首次创建）
@@ -202,11 +210,11 @@ Module 2: Daemon（team3/daemon/）
 
 Module 3: CLI scaffold（team3/cli/）
   拷贝到被管理项目的 cli/ 目录，供 Agent（尤其 UAT）直接 import 使用
-  simulate_human.mjs / logger.mjs / browser.mjs / watchdog.mjs / write-action.mjs 等
+  write-action.mjs / experience.mjs / simulate_human.mjs / logger.mjs / browser.mjs 等
 
 Module 4: 人类协作方法（team3/human_coding/）
-  tech-stack.md 等跨角色共享的开发约束文档
-  下发到被管理项目根目录，Dev / UAT 都读取遵循
+  三角色 prompt + team3.md（构建期内联进 prompt）+ reference 文档（tech-stack、arch-ui、dev-ui 等）
+  reference 打包进 team3 包内（pkg/assets/ref），Agent 通过 prompt 中的 `{ref}` 占位符按需读取，不下发到被管理项目
 ```
 
 **模块依赖**：Module 2 是基础，Module 1 管理 Daemon 生命周期；Module 3 由 Module 1 在初始化时拷贝到项目
@@ -230,29 +238,32 @@ code cli 非交互模式，任务完成后进程自动退出，"exit code 0 = �
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `action` | ✅ | `to_arch` / `dev_do` / `dev_fix` / `to_human` / `uat_design` / `uat_check` / `uat_fix` / `note`，代表不同含义 |
-| `from` | ✅ | 发起方：`arch` / `dev` / `uat` / `human` |
+| `action` | ✅ | `to_arch` / `to_dev` / `to_uat` / `to_human` / `dev_do` / `dev_fix` / `uat_design` / `uat_check` / `uat_fix` / `note` / `rebase`，代表不同含义 |
+| `from` | ✅ | 发起方：`arch` / `dev` / `uat` / `human` / `T3`（daemon 系统消息） |
 | `to` | ✅ | 接收方（`note` 时可为空串） |
 | `ts` | ✅ | unix 秒级时间戳 |
 | `message` | ✅ | **发送给对方的消息**（人类可读，在 timeline 直接展示） |
 
 ```jsonl
-{"action":"uat_design","from":"human","to":"uat","ts":1779067700,"message":"所有 module 设计完成，请开始 uat_design"}
 {"action":"dev_do","from":"arch","to":"dev","ts":1779067112,"message":"请实现 Feature #6 #7"}
 {"action":"to_arch","from":"dev","to":"arch","ts":1779067512,"message":"Feature #6 #7 已交付，checkpoint 全部通过，等待验收"}
 {"action":"dev_fix","from":"arch","to":"dev","ts":1779067512,"message":"Feature #6 验收不通过，请修复 xxx"}
+{"action":"to_dev","from":"human","to":"dev","ts":1779067600,"message":"补充一句：错误提示文案用中文"}
 {"action":"to_human","from":"arch","to":"human","ts":1779067700,"message":"module 1 xxx，Feature #6 #7 通过"}
-{"action":"uat_check","from":"arch","to":"uat","ts":1779067700,"message":"module 1 已完成，请你开始 uat 验证"}
-{"action":"uat_fix","from":"arch","to":"uat","ts":1779067800,"message":"UAT Story #2 的产品问题已修复，请重验 [uat-story: 2]"}
+{"action":"uat_design","from":"arch","to":"uat","ts":1779067700,"message":"所有 module 已开发完和验收，请设计用户故事"}
+{"action":"to_uat","from":"human","to":"uat","ts":1779067750,"message":"Story 2 的场景 3 改成先登录再下单"}
+{"action":"uat_check","from":"arch","to":"uat","ts":1779067800,"message":"stories 已确认，开始全量验收"}
+{"action":"uat_fix","from":"arch","to":"uat","ts":1779067900,"message":"UAT Story #2 的产品问题已修复，请重验 [uat-story: 2]"}
 {"action":"note","from":"arch","to":"","ts":1779067900,"message":"note ..."}
 ```
 
 >**action 分类说明：**
-> - 混合任务执行：to_arch / to_human —— human/arch 是系统中枢角色，用通用 to_xx 表达
-> - 单一任务执行：dev_do / dev_fix / uat_design / uat_check / uat_fix —— daemon 据此调度 session，任务明确
-> - `dev_do` / `uat_design` / `uat_check` 表示新任务，daemon 新建对应 Agent session；`dev_fix` / `uat_fix` 表示当前任务修复或重验，daemon 复用当前 session
+> - `to_human`：Agent 发给人类
+> - `to_arch` / `to_dev` / `to_uat`：发给对应 Agent 的消息——内容混合（提问/交付/反馈/补充信息），接收方自己判断怎么处理，daemon 复用当前 session。其中 `to_dev` / `to_uat` 仅人类可发（write-action 强制校验），不是新任务、不改变当前任务的验收标准
+> - `dev_do` / `dev_fix` / `uat_design` / `uat_check` / `uat_fix`：明确任务——daemon 据此调度 session。`dev_do` / `uat_design` / `uat_check` 表示新任务，daemon 新建对应 Agent session；`dev_fix` / `uat_fix` 表示当前任务修复或重验，daemon 复用当前 session
 > - 如果 `--resume` 失败且提示 session 不存在，daemon 替换当前无效 `runing`，生成新 session id，并用同一条消息以 `--session-id` 重试
 > - note：daemon 记录信息、通知人类，保留作为未来扩展
+> - rebase：人类发起方向推翻（web 匹配 `[rebase: xxx]`，to 固定 `T3`），daemon 直接拦截处理，不进 agent 队列——归档 Agent 出提案、人类确认后执行归档、置空 arch session、daemon 以 `T3` 身份发重启消息
 
 **message 末尾 reread 协议**：
 - **触发**：除 actions.jsonl 和 agents/ 之外，修改 spec/* 任一文件

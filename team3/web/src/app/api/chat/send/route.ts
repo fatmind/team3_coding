@@ -4,6 +4,11 @@
  * Body: { action: string, to: string, message: string }
  * Appends a JSON line to spec/actions.jsonl with from='human' and ts=current timestamp.
  * Returns 200 on success.
+ *
+ * Special message format (rebase flow, collaboration.md 改进项 0):
+ *   [rebase: xxx] → action=rebase, message=xxx
+ *   One format only — daemon decides by state: no pending rebase = new
+ *   baseline; pending = reply to the archive agent (确认/调整/取消).
  */
 
 import * as fs from "node:fs";
@@ -13,8 +18,23 @@ import { webLog } from "@/lib/web-logger";
 
 export const dynamic = "force-dynamic";
 
-const VALID_ACTIONS = ["to_arch", "to_human", "dev_do", "dev_fix", "uat_design", "uat_check", "uat_fix", "note"];
+const VALID_ACTIONS = ["to_arch", "to_dev", "to_uat", "to_human", "dev_do", "dev_fix", "uat_design", "uat_check", "uat_fix", "note"];
 const VALID_TARGETS = ["arch", "dev", "uat", "human", ""];
+
+const REBASE_MESSAGE_RE = /^\[rebase:\s*([\s\S]+?)\s*\]$/;
+
+/**
+ * Detect the rebase special format in a human message.
+ * Returns rewritten { action, to, message } or null if not a rebase message.
+ */
+function matchRebase(message: string): { action: string; to: string; message: string } | null {
+  const match = message.trim().match(REBASE_MESSAGE_RE);
+  if (match) {
+    // rebase is handled by the daemon itself (shown as T3 in chat), not by an agent
+    return { action: "rebase", to: "T3", message: match[1] };
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   const start = Date.now();
@@ -80,12 +100,15 @@ export async function POST(request: Request) {
 
   const actionsFile = path.join(workspaceRoot, "spec", "actions.jsonl");
 
+  // Rebase special format takes precedence over the declared action
+  const rebase = matchRebase(message);
+
   const entry = {
-    action,
+    action: rebase ? rebase.action : action,
     from: "human",
-    to,
+    to: rebase ? rebase.to : to,
     ts: Math.floor(Date.now() / 1000),
-    message,
+    message: rebase ? rebase.message : message,
   };
 
   try {

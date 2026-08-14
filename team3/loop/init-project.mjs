@@ -47,9 +47,12 @@ function seedDesign(workspacePath, designPath) {
 const DEFAULT_BRIEF =
   '请先阅读 spec/app_design.md，按其中的产品意图开始整体设计。若有产品决策需要确认，通过 to_human 向我提问。';
 
-export function kickArch(workspacePath, message = DEFAULT_BRIEF) {
+export function kickArch(workspacePath, message) {
+  // 默认参数只在实参为 undefined 时生效；调用方常传 null（未指定 --brief），
+  // 那样会写出 message:null 被 daemon 校验拒收 —— 所以在函数体内兜底。
+  const text = (message && String(message).trim()) || DEFAULT_BRIEF;
   const actionsPath = path.join(path.resolve(workspacePath), 'spec', 'actions.jsonl');
-  const entry = { action: 'to_arch', from: 'human', to: 'arch', ts: Math.floor(Date.now() / 1000), message };
+  const entry = { action: 'to_arch', from: 'human', to: 'arch', ts: Math.floor(Date.now() / 1000), message: text };
   fs.mkdirSync(path.dirname(actionsPath), { recursive: true });
   fs.appendFileSync(actionsPath, JSON.stringify(entry) + '\n', 'utf-8');
   return entry;
@@ -65,8 +68,12 @@ export async function initProject(workspacePath, { name, designPath, kick = fals
   const projName = name || path.basename(absWorkspace);
   addProject({ name: projName, workspace: absWorkspace, createdTime: getToday() });
 
-  // 显式传 daemonEntryPath，避开 web startDaemon 里基于 process.cwd() 的入口推断
-  const { pid, port } = await startDaemon(absWorkspace, { daemonEntryPath: DAEMON_ENTRY });
+  // daemon 入口：
+  // - 打包模式（TEAM3_PKG_DIR 已设）→ 不传，让 web 的 resolveDaemonEntry 解析成
+  //   $TEAM3_PKG_DIR/daemon.min.js，从而验证终端用户真实链路；
+  // - 源码模式 → 显式传 DAEMON_ENTRY，避开它基于 process.cwd() 的入口推断。
+  const startOpts = process.env.TEAM3_PKG_DIR ? {} : { daemonEntryPath: DAEMON_ENTRY };
+  const { pid, port } = await startDaemon(absWorkspace, startOpts);
 
   let kicked = null;
   if (kick) kicked = kickArch(absWorkspace, brief);

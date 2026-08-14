@@ -1,49 +1,42 @@
-# 效率基线 — vote-app（profile: full）
+# 效率基线 — vote-app（由一次通过的回归结果另存）
 
-- 建立时间: 2026-07-18T02:27:02.546Z
-- 一次性完成: 否
-- token 估算: 1829906
-- 耗时: 139m 57s
-- 总 action 数: 94
-- acceptance: 未运行（harness 超时导致跳过）
+- benchmark: full
+- workspace: /tmp/t3-regress/vote-app
+- 开始时间: 2026-08-03 17-23-58
+- 结束时间: 2026-08-03 18-51-57
 
-> 后续回归对比下方 json；一次性完成由「是」变「否」→ 强报警；token/耗时 ≥ 2× → 弱提示。
-> 注：本次因检测逻辑 bug（要求 uat_report 覆盖全部 spec story，实际 UAT 只跑了 5/7）导致 harness 超时，
-> 但项目实际已完成（state.json 5/5 pass）。检测逻辑已修复（新增 detectStateCompletion）。
+## 指标
 
-```json
-{
-  "profile": "full",
-  "oneShot": false,
-  "tokensTotal": 1829906,
-  "durationMs": 8397000,
-  "totalActions": 94,
-  "acceptance": null,
-  "createdAt": "2026-07-18T02:27:02.546Z",
-  "detail": {
-    "devRework": 3,
-    "uatRework": 3,
-    "repairRounds": 2,
-    "storiesPassed": 5,
-    "storiesInSpec": 7,
-    "commits": 17,
-    "tokensByRole": {
-      "arch": { "input": 357969, "output": 87274, "total": 445243, "results": 31 },
-      "dev": { "input": 489151, "output": 101244, "total": 590395, "results": 12 },
-      "uat": { "input": 686039, "output": 108229, "total": 794268, "results": 10 }
-    },
-    "actionDistribution": {
-      "to_arch": 29,
-      "note": 21,
-      "to_human": 12,
-      "dev_do": 11,
-      "dev_done": 8,
-      "uat_check": 5,
-      "dev_fix": 3,
-      "uat_fix": 3,
-      "uat_done": 1,
-      "uat_design": 1
-    }
-  }
-}
-```
+- 回归是否通过：是
+  - story 通过数 2/2
+  - uat_report.md 是否生成: 是
+
+- 总耗时: 97m 25s（仅 agent 执行，不含互等空转；从开始到完成经过时间 87m 59s）
+  - arch：25m 41s
+  - dev：55m 58s
+  - uat：14m 31s
+  - judge：1m 14s
+
+- token 估算: total 1207729（in 938970 / out 268759）
+  - arch: 336434（in 278189 / out 58245）· 9 个 session
+  - dev: 749116（in 581255 / out 167861）· 7 个 session
+  - uat: 118856（in 76373 / out 42483）· 3 个 session
+  - judge: 3323（in 3153 / out 170）· 7 个 session
+
+- 总 llm 请求数：493
+  - arch：126
+  - dev：293
+  - uat：67
+  - judge：7
+
+- Arch 派发的返工：有
+  - dev_fix 1 次
+  - uat_fix 0 次
+
+- UAT 自修轮次: 0 轮
+  - script_issue 0
+  - product_issue 0
+
+- 总 action 数: 27
+  - 按任务类型: to_arch=10, dev_do=6, to_human=5, note=2, dev_fix=1, uat_design=1, to_uat=1, uat_check=1
+  - 按谁发送的: arch=14, dev=7, uat=4, human=2

@@ -7,23 +7,38 @@ const path = require('path');
  * DaemonLogger - Feature #18
  *
  * Structured event logging for daemon lifecycle.
- * Writes to <workspace>/logs/daemon.log with timestamped tagged lines.
+ * Writes to <workspace>/logs/daemon_YYYY-MM-DD.log with timestamped tagged lines,
+ * rolling to a new file when the date changes (same scheme as agent-logger).
  * Tags: [START] [STOP] [WATCH] [ROUTE] [DISPATCH] [DONE] [TIMEOUT] [RETRY] [DEAD_LETTER] [WS] [ERROR] [HEALTH]
  */
 class DaemonLogger {
   constructor(options = {}) {
     this.logDir = options.logDir;
     this._stream = null;
+    this._streamDate = null;
+  }
+
+  _currentDate() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   }
 
   _ensureStream() {
-    if (this._stream) return;
     if (!this.logDir) return;
+    const date = this._currentDate();
+    if (this._stream && this._streamDate === date) return;
+    // Date rolled over (or first write): close old stream, open dated file
+    if (this._stream) {
+      this._stream.end();
+      this._stream = null;
+    }
     if (!fs.existsSync(this.logDir)) {
       fs.mkdirSync(this.logDir, { recursive: true });
     }
-    const logPath = path.join(this.logDir, 'daemon.log');
+    const logPath = path.join(this.logDir, `daemon_${date}.log`);
     this._stream = fs.createWriteStream(logPath, { flags: 'a' });
+    this._streamDate = date;
   }
 
   _formatTs() {
@@ -96,6 +111,7 @@ class DaemonLogger {
     if (this._stream) {
       this._stream.end();
       this._stream = null;
+      this._streamDate = null;
     }
   }
 }

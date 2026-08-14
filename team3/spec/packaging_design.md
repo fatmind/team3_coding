@@ -94,14 +94,11 @@ team3/
 │   └── .next/static/
 ├── daemon.min.js             ← esbuild + javascript-obfuscator（含全部 prompts）
 └── assets/
-    └── cli/
-        ├── simulate_human.mjs
-        ├── logger.mjs
-        ├── browser.mjs
-        └── watchdog.mjs
+    ├── cli/                  ← cli/*.mjs 全量（write-action / experience / simulate_human / logger / browser 等）
+    └── ref/                  ← reference 文档（tech-stack / arch-ui / dev-ui / dev-init-sh / dev-html-prototype / uat-scaffold），prompt 中 `{ref}` 占位符指向这里
 ```
 
-无任何 .md 文件。无 prompt 痕迹。
+assets/ref 下是给 Agent 按需读的 .md，不含 prompt 本体；prompt 仍只存在于混淆后的 daemon.min.js。
 
 ---
 
@@ -114,12 +111,14 @@ team3/
 ├── spec/
 │   ├── app_design.md
 │   ├── actions.jsonl
-│   └── decision_log.md
+│   ├── decisions.md
+│   └── experience.md
 ├── cli/
+│   ├── write-action.mjs
+│   ├── experience.mjs
 │   ├── simulate_human.mjs
 │   ├── logger.mjs
-│   ├── browser.mjs
-│   └── watchdog.mjs
+│   └── browser.mjs ...
 ├── uat/
 ├── logs/
 ├── .team3-project.json
@@ -196,12 +195,13 @@ npx javascript-obfuscator dist/daemon.bundle.js \
 cd "$TOOL_DIR/web" && npm run build && cd "$TOOL_DIR"
 
 # 4. 组装 npm package
-rm -rf pkg && mkdir -p pkg/{bin,server,assets/cli}
+rm -rf pkg && mkdir -p pkg/{bin,server,assets/cli,assets/ref}
 cp bin/team3.js pkg/bin/
 cp -r web/.next/standalone/* pkg/server/
 cp -r web/.next/static pkg/server/.next/static
 cp dist/daemon.min.js pkg/
 cp cli/*.mjs pkg/assets/cli/
+cp human_coding/{tech-stack,arch-ui,dev-ui,dev-init-sh,dev-html-prototype,uat-scaffold}.md pkg/assets/ref/
 node build/gen-package-json.js > pkg/package.json
 
 # 5. pack
@@ -226,7 +226,8 @@ const SKELETON_DIRS = ["spec", "cli", "uat", "logs"];
 const SKELETON_FILES: Record<string, string> = {
   "spec/app_design.md": "# App Design\n\n> Write your product architecture here.\n",
   "spec/actions.jsonl": "",
-  "spec/decision_log.md": "# Decision Log\n",
+  "spec/decisions.md": "# 生效的人类决策\n",
+  "spec/experience.md": "# Agent 经验教训\n",
 };
 
 function getCliSourceDir(): string {

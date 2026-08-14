@@ -10,6 +10,16 @@ const OUTPUT = path.join(ROOT, 'daemon', 'src', 'embedded-prompts.js');
 
 const ROLES = ['arch', 'dev', 'uat'];
 
+// qodercli/claude hard limit for --system-prompt. {cwd} placeholders are
+// expanded to the absolute workspace path at runtime — reserve room for a
+// long path so the check reflects the REAL runtime length (lazada 事故:
+// 源文件 15998 过检，{cwd} 展开后 16040 被 CLI 拒绝).
+// {ref} placeholders expand to the team3 package ref dir, same allowance.
+const MAX_PROMPT_LENGTH = 16000;
+const WARN_PROMPT_LENGTH = 15000;
+const CWD_ALLOWANCE = 160;
+const REF_ALLOWANCE = 160;
+
 // Matches human_coding FIRST lines, e.g. `./team3.md` or `human_coding/team3.md`
 const FIRST_LINE_RE = /^\*\*FIRST\*\*: Read `[^`]*team3\.md`[^\n]*\n/m;
 
@@ -32,6 +42,25 @@ for (const role of ROLES) {
       `${role}_prompt.md: failed to inline team3.md from human_coding/ — check FIRST line format`
     );
   }
+
+  const cwdCount = (merged.match(/\{cwd\}/g) || []).length;
+  const refCount = (merged.match(/\{ref\}/g) || []).length;
+  const effectiveLength = merged.length
+    + cwdCount * (CWD_ALLOWANCE - '{cwd}'.length)
+    + refCount * (REF_ALLOWANCE - '{ref}'.length);
+  if (effectiveLength > MAX_PROMPT_LENGTH) {
+    throw new Error(
+      `${role} prompt too long: ${merged.length} chars + placeholders ` +
+      `expanded = ${effectiveLength} > ${MAX_PROMPT_LENGTH}. ` +
+      `Cut at least ${effectiveLength - MAX_PROMPT_LENGTH} chars from ${role}_prompt.md or team3.md.`
+    );
+  }
+  if (effectiveLength > WARN_PROMPT_LENGTH) {
+    console.warn(
+      `WARN: ${role} prompt near limit: effective ${effectiveLength} > ${WARN_PROMPT_LENGTH}（预警线）, hard limit ${MAX_PROMPT_LENGTH}.`
+    );
+  }
+  console.log(`${role}: ${merged.length} chars (effective ${effectiveLength}/${MAX_PROMPT_LENGTH})`);
 
   result[role] = merged;
 }

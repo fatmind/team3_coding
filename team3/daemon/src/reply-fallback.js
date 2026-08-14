@@ -1,6 +1,8 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
 
 /**
  * ReplyFallback - Feature #14
@@ -11,7 +13,18 @@ const fs = require('fs');
  * On exit 0: parse stdout (stream-json), extract last result text,
  * check if agent wrote to actions.jsonl during execution,
  * if not → auto-append fallback message.
+ *
+ * Write path: goes through cli/write-action.mjs (the single write gate,
+ * so VALID_ACTIONS / human-only rules live in ONE place) in lenient mode:
+ * judge skipped (session is over, nobody can rewrite), message pre-truncated.
+ * Only if the CLI itself is unavailable do we append directly — a rejected
+ * fallback with no writer means a message black hole.
  */
+
+// Actions an agent may legitimately emit. to_dev/to_uat are human-only and
+// note is drop-on-purpose; anything else found in result text gets downgraded
+// to a role-default report instead of being written verbatim.
+const AGENT_ACTIONS = ['to_arch', 'to_human', 'dev_do', 'dev_fix', 'uat_design', 'uat_check', 'uat_fix', 'note'];
 
 /**
  * Extract result text from stream-json stdout.
@@ -70,17 +83,21 @@ function extractActionFromResult(resultText, role) {
 }
 
 /**
- * Build a fallback to_human action from result text.
+ * Build a fallback action from result text.
+ * Default recipient follows the reporting chain: dev/uat report to arch
+ * (治"UAT 干完活忘记通知 arch"——兜底消息直接把结果递给调度者)，
+ * arch reports to human.
  *
  * @param {string} resultText - The result text
  * @param {string} role - The agent role
- * @returns {Object} Action object for to_human
+ * @returns {Object} Action object
  */
 function buildFallbackAction(resultText, role) {
+  const toArch = role === 'dev' || role === 'uat';
   return {
-    action: 'to_human',
+    action: toArch ? 'to_arch' : 'to_human',
     from: role,
-    to: 'human',
+    to: toArch ? 'arch' : 'human',
     ts: Math.floor(Date.now() / 1000),
     message: resultText,
   };
@@ -137,6 +154,91 @@ function getFileOffset(filePath) {
 }
 
 /**
+ * Truncate over-long fallback message before append.
+ * Fallback bypasses the write-action length gate (500) and judge; nobody can
+ * rewrite it (session already ended), so reject = message black hole.
+ * Instead: cut at the limit and point to the full text in the agent log.
+ *
+ * @param {Object} action - Action object (mutated)
+ * @param {string} role - Agent role, used for log file name
+ * @returns {Object} The same action with message truncated if needed
+ */
+function truncateFallbackMessage(action, role) {
+  if (!action || typeof action.message !== 'string') return action;
+  const maxLen = Number(process.env.TEAM3_AGENT_MSG_MAX) || 500;
+  if (action.message.length <= maxLen) return action;
+
+  const now = new Date();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const date = `${now.getFullYear()}-${m}-${d}`;
+  // Total length (body + suffix) must stay <= maxLen so the truncated message
+  // still passes write-action's length gate instead of bouncing to the
+  // direct-append disaster path.
+  const suffix = `\n……[超 ${maxLen} 字已截断，全文见 logs/${role}_${date}.log]`;
+  action.message = action.message.slice(0, Math.max(0, maxLen - suffix.length)) + suffix;
+  return action;
+}
+
+/**
+ * Sanitize an action extracted from agent result text before writing.
+ * Verbatim-extracted JSON is agent-claimed: action type and from are not
+ * trustworthy. Anything outside the agent whitelist (e.g. human-only
+ * to_dev/to_uat, or a spoofed from=human) is downgraded to the role-default
+ * report so the content survives but the routing/session semantics don't
+ * get hijacked.
+ *
+ * @param {Object|null} action - Extracted action (may be null)
+ * @param {string} resultText - Full result text (downgrade fallback body)
+ * @param {string} role - Actual agent role (authoritative "from")
+ * @returns {Object} Safe action object
+ */
+function sanitizeExtractedAction(action, resultText, role) {
+  if (!action) return buildFallbackAction(resultText, role);
+  if (!AGENT_ACTIONS.includes(action.action) || action.from !== role) {
+    return buildFallbackAction(resultText, role);
+  }
+  return action;
+}
+
+/**
+ * Write the fallback action through cli/write-action.mjs — the single write
+ * gate — in lenient mode (judge skipped; message already truncated here).
+ * Returns { ok, detail }. Caller falls back to a direct append only when the
+ * CLI is unavailable/broken, so a tool failure never becomes a message hole.
+ *
+ * @param {Object} action - Action to write
+ * @param {string} actionsFilePath - Path to actions.jsonl
+ * @returns {{ ok: boolean, detail: string }}
+ */
+function writeViaCli(action, actionsFilePath) {
+  const workspace = path.resolve(path.dirname(actionsFilePath), '..');
+  const cliPath = path.join(workspace, 'cli', 'write-action.mjs');
+  if (!fs.existsSync(cliPath)) {
+    return { ok: false, detail: 'cli-missing' };
+  }
+
+  const res = spawnSync(process.execPath, [
+    cliPath, actionsFilePath,
+    '--action', action.action,
+    '--from', action.from,
+    '--to', action.to,
+    '--message', action.message,
+  ], {
+    encoding: 'utf-8',
+    cwd: workspace,
+    timeout: 30000,
+    env: { ...process.env, TEAM3_JUDGE_SKIP: '1' },
+  });
+
+  if (res.error) return { ok: false, detail: `cli-error: ${res.error.message}` };
+  if (res.status !== 0) {
+    return { ok: false, detail: `cli-exit-${res.status}: ${(res.stderr || '').substring(0, 200)}` };
+  }
+  return { ok: true, detail: 'cli' };
+}
+
+/**
  * Execute the full fallback flow.
  * Called after claude exit 0.
  *
@@ -159,31 +261,40 @@ function applyFallback({ stdout, role, actionsFilePath, spawnOffset }) {
     return { applied: false, action: null, reason: 'already-written' };
   }
 
-  // Step 3: Try to extract action JSON from result, or build fallback
-  let action = extractActionFromResult(resultText, role);
-  if (!action) {
-    action = buildFallbackAction(resultText, role);
-  }
+  // Step 3: Try to extract action JSON from result, sanitize agent claims
+  const action = sanitizeExtractedAction(
+    extractActionFromResult(resultText, role), resultText, role
+  );
 
   // Ensure ts is current
   if (!action.ts) {
     action.ts = Math.floor(Date.now() / 1000);
   }
 
-  // Step 4: Append to actions.jsonl
+  // Step 3.5: Enforce the same length limit as write-action (truncate, not reject)
+  truncateFallbackMessage(action, role);
+
+  // Step 4: Write through the single gate; direct append only as disaster
+  // fallback (tool unavailable — losing the message is worse than bypassing)
+  const gate = writeViaCli(action, actionsFilePath);
+  if (gate.ok) {
+    return { applied: true, action, reason: 'fallback-applied' };
+  }
   try {
     fs.appendFileSync(actionsFilePath, JSON.stringify(action) + '\n');
   } catch (err) {
     return { applied: false, action, reason: `write-error: ${err.message}` };
   }
-
-  return { applied: true, action, reason: 'fallback-applied' };
+  return { applied: true, action, reason: `fallback-applied-direct (${gate.detail})` };
 }
 
 module.exports = {
   extractResultText,
   extractActionFromResult,
   buildFallbackAction,
+  sanitizeExtractedAction,
+  truncateFallbackMessage,
+  writeViaCli,
   hasNewWritesSince,
   getFileOffset,
   applyFallback,

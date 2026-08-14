@@ -19,16 +19,29 @@ function loadProvider(codeCliConfig) {
     throw new Error('codeCli config missing or missing "type" field');
   }
 
+  let provider;
   switch (codeCliConfig.type) {
     case 'claude-code':
-      return claudeCode;
+      provider = claudeCode;
+      break;
     case 'qoder-code':
-      return qoderCode;
+      provider = qoderCode;
+      break;
     case 'qodercli':
-      return qoderCode;
+      provider = qoderCode;
+      break;
     default:
       throw new Error(`Unknown codeCli type: "${codeCliConfig.type}". Supported: claude-code, qoder-code`);
   }
+
+  // Honor an optional `command` override so callers can swap the underlying CLI
+  // binary (e.g. qodercli intl vs qoderclicn CN) purely via ~/.team3/config.json,
+  // without editing the provider module. Return a shallow clone to avoid mutating
+  // the shared singleton (methods are copied by reference).
+  if (codeCliConfig.command && codeCliConfig.command !== provider.command) {
+    provider = { ...provider, command: codeCliConfig.command };
+  }
+  return provider;
 }
 
 /**

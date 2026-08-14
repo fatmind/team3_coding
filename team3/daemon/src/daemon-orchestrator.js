@@ -7,6 +7,7 @@ const Daemon = require('./daemon');
 const ActionWatcher = require('./action-watcher');
 const AgentScheduler = require('./agent-scheduler');
 const MessageRouter = require('./message-router');
+const RebaseHandler = require('./rebase-handler');
 const StatePersistence = require('./state-persistence');
 const ProjectJson = require('./project-json');
 const DaemonLogger = require('./daemon-logger');
@@ -102,6 +103,17 @@ class DaemonOrchestrator extends EventEmitter {
       daemon: this.daemon,
     });
 
+    // Rebase flow (collaboration.md 改进项 0): archive stale docs + reset session
+    this.rebaseHandler = options.rebaseHandler || new RebaseHandler({
+      workspaceDir: this.workspaceDir,
+      specDir: options.specDir || path.join(this.workspaceDir, 'spec'),
+      actionsFilePath: options.actionsFilePath || path.join(this.workspaceDir, 'spec', 'actions.jsonl'),
+      projectJsonPath: this.projectJsonPath,
+      spawnFn: options.spawnFn,
+      uuidFn: options.uuidFn,
+      provider: options.provider,
+    });
+
     // Feature #18: Structured daemon logger
     this.logger = options.logger || new DaemonLogger({
       logDir: path.join(this.workspaceDir, 'logs'),
@@ -138,7 +150,7 @@ class DaemonOrchestrator extends EventEmitter {
       const msg = `Agent 写入格式错误（缺少字段: ${missing.join(', ')}）。原始内容: ${summary}`;
       this.logger._write('VALIDATION_ERROR', msg);
       try {
-        const action = { action: 'to_human', from: 'daemon', to: 'human', ts: Math.floor(Date.now() / 1000), message: msg };
+        const action = { action: 'to_human', from: 'T3', to: 'human', ts: Math.floor(Date.now() / 1000), message: msg };
         const actionsPath = this.actionWatcher.filePath;
         fs.appendFileSync(actionsPath, JSON.stringify(action) + '\n');
       } catch (e) {
@@ -197,6 +209,35 @@ class DaemonOrchestrator extends EventEmitter {
       this.emit('routed', data);
     });
 
+    // Rebase lifecycle logging
+    this.rebaseHandler.on('scan-start', (data) => {
+      this.logger._write('REBASE', `scan-start role=${data.role} whitelist=[${(data.whitelist || []).join(', ')}]`);
+    });
+    this.rebaseHandler.on('resume', (data) => {
+      this.logger._write('REBASE', `resume session=${data.sessionId}`);
+    });
+    this.rebaseHandler.on('awaiting-reply', (data) => {
+      this.logger._write('REBASE', `awaiting human reply (phase=${data.phase})`);
+    });
+    this.rebaseHandler.on('agent-failed', (data) => {
+      this.logger._write('REBASE', `agent-failed ${JSON.stringify(data)}`);
+    });
+    this.rebaseHandler.on('agent-timeout', (data) => {
+      this.logger._write('REBASE', `agent-timeout phase=${data.phase} timeoutMs=${data.timeoutMs}`);
+    });
+    this.rebaseHandler.on('executed', (data) => {
+      this.logger._write('REBASE', `executed role=${data.pending.role} whitelistLost=${(data.whitelistLost || []).length}`);
+    });
+    this.rebaseHandler.on('cancelled', () => {
+      this.logger._write('REBASE', 'cancelled');
+    });
+    this.rebaseHandler.on('session-cleared', (data) => {
+      this.logger._write('REBASE', `session-cleared role=${data.role}`);
+    });
+    this.rebaseHandler.on('error', (data) => {
+      this.logger.error(`rebase: ${data.error} (${data.context})`);
+    });
+
     this.isRunning = true;
     this.logger.start({ port: this.options.port || config.port, workspaceDir: this.workspaceDir });
 
@@ -221,6 +262,7 @@ class DaemonOrchestrator extends EventEmitter {
 
     // Feature #16: SIGTERM all tracked child processes
     this.agentScheduler.clearAllTimers();
+    this.rebaseHandler.stop();
     const killed = this.agentScheduler.killAllProcesses();
     if (killed.length > 0) {
       this.emit('shutdown-kill', { killed });
@@ -342,6 +384,13 @@ class DaemonOrchestrator extends EventEmitter {
 
   _dispatchToScheduler(action, rawLine) {
     this.logger.watch(action);
+
+    // Rebase actions are handled by RebaseHandler, never by agent queues
+    if (RebaseHandler.REBASE_ACTIONS.has(action.action)) {
+      this.logger._write('REBASE', `action=${action.action} to=${action.to}`);
+      this.rebaseHandler.handle(action);
+      return;
+    }
 
     const rewrittenMessage = rewriteMessage(action.message, action.to);
 

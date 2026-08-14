@@ -10,6 +10,7 @@
 import { execSync, execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const SYSTEM_PROMPT = `你是一个真实用户，正在使用一款产品。
@@ -23,6 +24,23 @@ const SYSTEM_PROMPT = `你是一个真实用户，正在使用一款产品。
 
 const MAX_RETRIES = 2;
 const TIMEOUT_MS = 60_000;
+
+const CODE_CLI_COMMANDS = { 'claude-code': 'claude', 'qoder-code': 'qodercli' };
+
+// 本机 code CLI 命令由 ~/.team3/config.json 的 codeCli 决定（如 qoder-code → qodercli）。
+// 不能硬编码：命令不存在时 execFileSync 报的是 ENOENT/被杀，表象像"安全软件拦截"，
+// UAT 会误判成环境问题去找人类要白名单，排查成本极高。
+function resolveCodeCliCommand() {
+  if (process.env.TEAM3_CODE_CLI) return process.env.TEAM3_CODE_CLI;
+  try {
+    const configPath = path.join(os.homedir(), '.team3', 'config.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const codeCli = config.codeCli || {};
+    const command = codeCli.command || CODE_CLI_COMMANDS[codeCli.type];
+    if (command) return command;
+  } catch { /* 配置缺失/损坏 → 兜底 */ }
+  return 'claude';
+}
 
 export function createHumanSimulator({ workspace, logger } = {}) {
   let sessionId = null;
@@ -49,7 +67,8 @@ export function createHumanSimulator({ workspace, logger } = {}) {
     }
   }
 
-  function callClaude(prompt) {
+  function callCli(prompt) {
+    const command = resolveCodeCliCommand();
     const args = ['-p', prompt, '--output-format', 'text'];
 
     if (!sessionId) {
@@ -60,14 +79,18 @@ export function createHumanSimulator({ workspace, logger } = {}) {
       args.push('--resume', sessionId);
     }
 
-    const result = execFileSync('claude', args, {
-      timeout: TIMEOUT_MS,
-      encoding: 'utf-8',
-      maxBuffer: 10 * 1024 * 1024,
-    });
-
-    saveSession();
-    return result.trim();
+    try {
+      const result = execFileSync(command, args, {
+        timeout: TIMEOUT_MS,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      saveSession();
+      return result.trim();
+    } catch (e) {
+      e.message = `code CLI "${command}" 调用失败: ${e.message}`;
+      throw e;
+    }
   }
 
   async function ask(prompt) {
@@ -76,7 +99,7 @@ export function createHumanSimulator({ workspace, logger } = {}) {
     let lastError = null;
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const content = callClaude(prompt);
+        const content = callCli(prompt);
         log(`got reply (${content.length} chars)`);
         return { content, error: null };
       } catch (e) {

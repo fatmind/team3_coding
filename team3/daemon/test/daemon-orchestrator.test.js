@@ -3,7 +3,14 @@
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const EventEmitter = require('events');
-const DaemonOrchestrator = require('../src/daemon-orchestrator');
+const RealDaemonOrchestrator = require('../src/daemon-orchestrator');
+const DaemonLogger = require('../src/daemon-logger');
+// Test wrapper: default to a no-file logger so tests never write <repo>/logs/daemon.log
+class DaemonOrchestrator extends RealDaemonOrchestrator {
+  constructor(options = {}) {
+    super({ logger: new DaemonLogger({}), ...options });
+  }
+}
 
 /**
  * Unit tests for DaemonOrchestrator (Feature #5)

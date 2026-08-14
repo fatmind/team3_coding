@@ -1,6 +1,7 @@
 'use strict';
 
 const embeddedPrompts = require('../embedded-prompts');
+const { getRefDir } = require('../ref-dir');
 
 const MAX_CONTENT_LENGTH = 500;
 
@@ -67,14 +68,17 @@ module.exports = {
   name: 'claude-code',
   command: 'claude',
 
-  buildArgs({ prompt, sessionId, isNew, role, workspaceDir }) {
+  buildArgs({ prompt, sessionId, isNew, role, workspaceDir, systemPromptOverride }) {
     if (!prompt) throw new Error('buildArgs: prompt is required');
     if (!sessionId) throw new Error('buildArgs: sessionId is required');
     if (!role) throw new Error('buildArgs: role is required');
 
     const args = ['-p', prompt];
     args.push(isNew ? '--session-id' : '--resume', sessionId);
-    const systemPrompt = embeddedPrompts[role].replace(/\{cwd\}/g, workspaceDir || process.cwd());
+    const rawSystemPrompt = systemPromptOverride != null ? systemPromptOverride : embeddedPrompts[role];
+    const systemPrompt = rawSystemPrompt
+      .replace(/\{cwd\}/g, workspaceDir || process.cwd())
+      .replace(/\{ref\}/g, getRefDir());
     args.push('--system-prompt', systemPrompt);
     args.push('--output-format', 'stream-json');
     args.push('--verbose');

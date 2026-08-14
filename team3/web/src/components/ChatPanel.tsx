@@ -158,13 +158,9 @@ export default function ChatPanel({ workspace }: ChatPanelProps) {
     const { cleanText, parsedTarget } = parseTarget(inputText);
     if (!cleanText.trim()) return;
 
-    // Determine action based on target
-    const actionMap: Record<string, string> = {
-      arch: "to_arch",
-      dev: "dev_do",
-      uat: "uat_design",
-    };
-    const action = actionMap[parsedTarget] || `to_${parsedTarget}`;
+    // Human chat is a pure-message channel: to_arch / to_dev / to_uat all
+    // reuse the agent's current session (task dispatch is arch's job)
+    const action = `to_${parsedTarget}`;
 
     // Immediately add to local messages (optimistic update)
     const localMessage: ChatMessage = {

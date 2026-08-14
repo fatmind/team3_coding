@@ -20,16 +20,16 @@
 
 ## 一、信号收集
 
-信号源是各项目的 `spec/decision_log.md`。人手动触发一次提取，就产生一次**独立迭代**（loop_N），每次只处理上次之后新增的条目。
+信号源是各项目的 `spec/experience.md`（Agent 经验）+ `spec/decisions.md`（人类决策），只认这两个文件（旧协议 `spec/decision_log.md` 已不再支持）。人手动触发一次提取，就产生一次**独立迭代**（loop_N），增量只处理新增内容。
 
 ```
-各项目 spec/decision_log.md（持续积累）
+各项目 spec/experience.md + spec/decisions.md
     │
     │  人手动触发
     │
     ▼  team3/loop/loop_N/（本次迭代的工作目录）
-    ├── issues.md          本次提取的系统问题（harness 哪没拦住）
-    └── habits.md          本次提取的人类偏好
+    ├── issues.md          本次提取的系统问题（harness 哪没拦住）← experience.md
+    └── habits.md          本次提取的人类偏好 ← decisions.md
 ```
 
 两类产出、两条下游：
@@ -39,7 +39,7 @@
 | issues | 人 review → 找 root cause → 改 harness → 回归验证 → pass 后打包升级 team3 |
 | habits | pass 后合并写入 `~/.team3/t3_mem.md`，team3 运行时读取 |
 
-decision_log 扩充：任何偏离理想路径的都记（Dev 自修复 ≥2 轮、Arch 秒过、UAT repair ≥3 轮、人类打回、模型假设错误）。每条带 `ref` 字段指向现场 artifact。
+经验记录协议（详见 team3.md）：任何偏离理想路径的都记进 `spec/experience.md`（Dev 自修复 ≥2 轮、Arch 秒过、UAT repair ≥3 轮、模型假设错误），每条带 `ref` 指向现场 artifact；人类决策单独进 `spec/decisions.md`（≤20 条生效快照）。
 
 ## 二、改进方向
 
@@ -64,20 +64,20 @@ decision_log 扩充：任何偏离理想路径的都记（Dev 自修复 ≥2 轮
 | 问题 | 怎么验 | 何时知道 |
 |------|--------|---------|
 | 改动没破坏已有流程？ | 回归：选定项目全量重跑 | 即时 |
-| root cause 真的不再出现？ | 后续真实项目 decision_log 不再出现同类记录 | 渐进积累 |
+| root cause 真的不再出现？ | 后续真实项目 experience.md 不再出现同类记录 | 渐进积累 |
 
 ## 五、整体循环
 
 ```
-日常项目 → decision_log 持续积累（~/.team3/projects.json 自动发现）
+日常项目 → experience.md / decisions.md 持续积累（~/.team3/projects.json 自动发现）
     ↓ 人手动触发 node extract.mjs
 loop_N/issues.md + habits.md（本次新增条目的提取，LLM qodercli）
     ↓ 人 review 提取质量（漏记、归错类就先修 prompt）
     ↓ 人分析 root cause，改 harness
     ↓ 回归（可选，run-regression.mjs，loop/vote-app 全量重跑）
-team3/loop/vote-app/regress.md
+team3/loop/vote-app/regress.<profile>.md
     ├── pass → 打包升级 team3；habits 合并进 ~/.team3/t3_mem.md
-    └── fail → 分析写入 regress.md，下次迭代继续
+    └── fail → 分析写入回归报告，下次迭代继续
     ↓ 闭环
 后续真实项目不再出现同类记录 → 确认修好
 ```
@@ -91,18 +91,17 @@ team3/loop/vote-app/regress.md
 ```
 team3/loop/
     ├── run-regression.mjs               # 回归主脚本
-    ├── extract.mjs                      # decision_log 提取脚本（Step 4）
+    ├── extract.mjs                      # 经验/决策提取脚本（Step 4）
     ├── vote-app/                        # 回归项目
-    │   ├── spec/app_design.md           # 干净起点（只此一个文件）
-    │   ├── acceptance.mjs               # 产品验收脚本（puppeteer）
-    │   ├── baseline.md                  # 效率基线
-    │   └── regress.md                   # 最近一次回归结果（vote-app 专属）
+    │   ├── app_design.md / .min.md      # 干净起点设计（full / min 两档）
+    │   ├── baseline.full.md / .min.md   # 效率基线（按 profile 分开）
+    │   └── regress.full.md / .min.md    # 最近一次回归结果（按 profile 分开）
     ├── loop_001/                        # 第 1 次迭代
     │   ├── issues.md                    # 本次提取的系统问题
     │   └── habits.md                    # 本次提取的人类偏好
     ├── loop_002/                        # 第 2 次迭代
     │   └── ...
-    └── .extract-state.json              # extract.mjs 增量状态（per-file 行号 offset）
+    └── .extract-state.json              # extract.mjs 增量状态（per-file 条目 hash 集合）
 ```
 
 ## 回归执行流程
@@ -110,13 +109,13 @@ team3/loop/
 ```
 run-regression.mjs vote-app
     │
-    ├── 1. 准备工作目录、清理残留，检查核心文件 spec/app_design.md、acceptance.mjs、baseline.md（可选）
-    ├── 3. 初始化 team3 项目
-    ├── 4. 触发 Arch 开始
-    ├── 5. 轮询等待完成（`spec/uat_report.md` 存在且结论是 pass）
-    ├── 6. 跑 acceptance.mjs → pass/fail
-    ├── 7. 采集效率指标（轮次/时间/token）对比 baseline
-    └── 8. 输出回归报告
+    ├── 1. 准备工作目录、清理残留，检查核心文件 spec/app_design.md、baseline.md（可选）
+    ├── 2. 初始化 team3 项目
+    ├── 3. 触发 Arch 开始
+    ├── 4. 轮询等待完成（`spec/uat_report.md` 存在且结论是 pass）
+    ├── 5. 交叉验证 uat_report.md 与 story 是否一致
+    ├── 6. 采集效率指标（轮次/时间/token）对比 baseline
+    └── 7. 输出回归报告
 ```
 
 ## 三层验证
@@ -125,21 +124,17 @@ run-regression.mjs vote-app
 |----|------|--------|
 | 流程完整性 | 是 | 全流程走完没，team3 协作规范有没遵循 |
 | 效率指标 | 是 | 轮次、时间、token 对比 baseline |
-| 产出质量 | 是 | acceptance.mjs 全绿 |
+| 产出质量 | 是 | uat_report.md 全 pass，且与 story 交叉验证一致 |
 
-## Acceptance Test（vote-app 举例）
+## 产出质量为什么不再用独立 acceptance 脚本
 
-从用户视角验证，用 puppeteer 操作真实浏览器页面（注：后续更新）：
+早期给 vote-app 写过一份独立的产品验收脚本（full 用 puppeteer 走三页动线，min 走纯 HTTP），想法是"harness 验过程、acceptance 验产品"，两层解耦。跑下来发现在这个场景不成立，已移除：
 
-```markdown
-1. 打开 /create，填写标题、添加单选题+多选题，提交 → 页面显示投票链接
-2. 新浏览器 context A 打开投票链接，选择选项，提交 → 跳转结果页，显示 1 票
-3. 新浏览器 context B 打开投票链接，选择不同选项，提交 → 结果页显示 2 票、百分比正确
-4. context A 再次打开投票链接，尝试提交 → 页面提示"已投过"
-5. 关闭问卷后，新 context C 打开投票链接 → 页面显示"已结束"
-6. 打开不存在的 /vote/xxx → 页面显示"问卷不存在"
-7. 清理
-```
+- vote-app 每次都是**独立重新生成**的。脚本必须写死 API 路径、`data-testid` 这些 `app_design.md` 根本没钉住的约定，Dev 没有义务命中
+- 于是失败绝大多数是**脚本与实现的命名不一致**，不是产品缺陷。2026-08-03 的 full 回归就是：UAT 2/2 pass、产品功能正确，acceptance 却因为等 `[data-testid="survey-title"]` 超时而全挂
+- 放宽到只验"最基本的"就没有区分度了，而且和 UAT story 覆盖的动线高度重叠
+
+要让外部验收重新成立，前提是把接口和 DOM 契约写进 `app_design.md` 当硬约束——那是另一个决定，不是给脚本打补丁。当前判据就是 harness 自己的 UAT 结果 + 交叉验证。
 
 ---
 
@@ -152,9 +147,7 @@ run-regression.mjs vote-app
 vote-app 回归不是什么特殊流程——就是把它当普通 team3 项目从头跑一遍。和人日常用 team3 建项目完全一样：初始化 → Arch 规划 → Dev 开发 → Arch 验收 → UAT 验证。唯一区别是"人在 web 上做判断"变成"一个 human-sim agent（qodercli session）动态做判断"。
 
 所以：
-- dev server 是 Dev 在开发过程中通过 init.sh 启动的，和正常项目一样
-- acceptance.mjs 跑的时候，项目已经 UAT pass，dev server 本来就在
-- acceptance.mjs 只需连接已有的 dev server，不需要自己启停
+- dev server 是 Dev 在开发过程中通过 init.sh 启动的，和正常项目一样；回归脚本不碰它的启停
 
 ## 多方交流靠 actions.jsonl，脚本代替人只是"追加一行"
 
@@ -181,13 +174,13 @@ team3 里 Arch / Dev / UAT / 人之间的所有沟通，都落在项目的 `spec
 
 ## 已定的实现决策
 
-- **loop 触发入口**：新增 CLI 子命令 `team3 loop`，由它创建并编号 `loop_N/`。增量边界用**每个项目 decision_log 文件的行号**记录（`.extract-state.json` 里 `project_list[].offset`），本次只处理其后新增的行。
-- **提取方式**：`decision_log → issues.md + habits.md` 用 **LLM（qodercli）** 做提取，不是正则。
-- **多项目遍历**：提取时读 `~/.team3/projects.json` 列表，逐个项目读其 `spec/decision_log.md`。
+- **loop 触发入口**：当前为 `node loop/extract.mjs`（`team3 loop` 子命令暂未实现，loop 目录不随包分发），由它创建并编号 `loop_N/`。增量边界用**条目内容 hash**（`.extract-state.json` 里 `project_list[].seen`）：每条 `## 日期 | ...` 条目归一化后取 hash，没见过的才是新增。不用行号——decisions.md / experience.md 都允许修订/删除旧条目（rebase 局部清理、经验修订），行号会错位；修订旧条目 = 新 hash = 重新提取，正是想要的行为。
+- **提取方式**：`经验/决策 → issues.md + habits.md` 用 **LLM（qodercli）** 做提取，不是正则。
+- **多项目遍历**：提取时读 `~/.team3/projects.json` 列表，逐个项目发现其 `spec/experience.md` / `spec/decisions.md`（旧协议 `decision_log.md` 不再支持）。
 - **habits 注入**：合并进 `~/.team3/t3_mem.md` 后，在 **package 打包时注入，作为 system prompt** 生效。
 - **打包升级**：regress pass 后走**现有 `build/` + `pkg/` 链路**打包上线（版本标记 / 回滚同此链路）。
 - **human-sim**：**全新**实现，借鉴现有 `simulate_human.mjs` 的"子空间隔离判断"模式，但独立、必须用 **qodercli**。
-- **回归超时**：先设 **60min** 超时，超时判失败，避免流程卡死时无限等。
+- **回归超时**：按 profile 定——min 60min、full 360min（full 范围大，60min 跑不完），超时判失败，避免流程卡死时无限等。
 - **qodercli 使用文档**：https://docs.qoder.com/zh/cli/quick-start
 
 ---
@@ -209,18 +202,15 @@ team3 里 Arch / Dev / UAT / 人之间的所有沟通，都落在项目的 `spec
 - 监听 actions.jsonl 中 `to_human` 新行，读懂上下文做产品判断，回复追加到 actions.jsonl
 - **验证**：手动触发一次 arch 的 to_human 提问，human-sim 能给出合理的产品决策回复，actions.jsonl 中出现对应的 from:human 行
 
-## Step 1：写 acceptance.mjs（独立产品验收）
+## Step 1：写 acceptance.mjs（独立产品验收）— 已废弃
 
-先不管回归主流程，单独把 vote-app 的验收脚本写对。
-
-- 用现成的、已经跑通的 `workspace/vote-app` 当测试对象（它 dev server 能起）
-- **验证**：对着好的 vote-app 跑 → 全绿；故意关掉服务 / 改坏一条数据 → 对应断言报 fail。证明脚本本身能区分好坏
+原计划单独写一份 vote-app 验收脚本，作为独立于 harness 的产出质量判据。已实现过（`acceptance.mjs` / `acceptance.min.mjs`），后因误报远多于真问题而移除，理由见前文「产出质量为什么不再用独立 acceptance 脚本」。产出质量现在由 harness 的 UAT 结果 + 交叉验证承担。
 
 ## Step 2：写 run-regression.mjs（串起全流程）
 
-串起 Step 0、1：清理 → 初始化项目 → 启动 human-sim → 等待完成 → 跑 acceptance → 采集指标 → 出报告。
+串起 Step 0：清理 → 初始化项目 → 启动 human-sim → 等待完成 → 交叉验证 → 采集指标 → 出报告。
 
-- **验证**：不改任何 harness，完整跑一次 vote-app，从只有 app_design.md 的干净起点一路到 acceptance 全绿，产出 regress.md。这步跑通 = 回归基础设施完成
+- **验证**：不改任何 harness，完整跑一次 vote-app，从只有 app_design.md 的干净起点一路到 UAT 全 pass，产出回归报告。这步跑通 = 回归基础设施完成
 - **提醒**：为了快速验证这过程，第一次执行时，可以简化 vote-app/app_design.md 设计，加速跑，等稳定后再跑完整的
 
 ## Step 3：跑基线
@@ -229,7 +219,7 @@ Step 2 跑通的那次就是 baseline。记录轮次/时间/token。
 
 - 一个项目跨很多次 session、执行时间长，单次波动被整体拉平，单次基线足够用
 - **验证**：baseline.md 有值；后续回归对比，明显退化（如轮次翻倍）才报警
-- todo：full 还没跑基线 —— 目前只有 baseline.min.md
+- 已完成：min / full 基线均已建立（baseline.min.md / baseline.full.md）
 
 ## Step 4：decision_log 扩充 + 提取
 
@@ -237,10 +227,10 @@ Step 2 跑通的那次就是 baseline。记录轮次/时间/token。
 
 - decision_log 扩充信号 [已完成]
 - 提取脚本 `team3/loop/extract.mjs`：
-  - 源：默认从 `~/.team3/projects.json` 自动发现各项目的 `spec/decision_log.md`；也可用 `--source <path>` 指定单个文件
-  - 增量：`.extract-state.json` 记录每个项目 `{project, decision_log_path, offset}`，offset = 该文件已读到的行号
+  - 源：默认从 `~/.team3/projects.json` 自动发现各项目的 `spec/experience.md` / `spec/decisions.md`；也可用 `--source <path>` 指定单个文件（文件名为 decisions.md 按人类决策处理，其余按经验处理）
+  - 增量：`.extract-state.json` 记录每个源 `{project, kind, path, seen[]}`，seen = 已见条目的内容 hash 集合，两类源统一；条目被修订/删除不影响其他条目判新旧（旧行号 offset 状态首次运行自动迁移）
   - 输出：`loop_N/issues.md` + `loop_N/habits.md`，编号自动递增
-  - 提取方式：两次 qodercli 调用——issues（带 7 方向分类）+ habits（只取 human 条目，按 5 条规则）
+  - 提取方式：两次 qodercli 调用——issues（带 7 方向分类，源 experience.md）+ habits（按 5 条规则，源 decisions.md）
   - `--reset` 清空增量状态重新处理；`--dry-run` 只展示待处理内容不调 LLM
 - **聚类 root cause 不在脚本里**：human review issues.md 后人工分析根因、改 harness——这是 manual step，不生成 analysis.md
 - **验证**：拿现有 decision_log 跑一次提取，人 review 提取质量——漏记、归错类就先修 prompt
@@ -249,7 +239,7 @@ Step 2 跑通的那次就是 baseline。记录轮次/时间/token。
 
 端到端验证整个机制。
 
-- 提取 → 人 review → 改 harness → 局部 check → 回归 → 出 regress.md
+- 提取 → 人 review → 改 harness → 局部 check → 回归 → 出回归报告
 - **验证**：loop_001/ 文件齐全；回归 pass 且效率没退化；改动打包上线；habits 合并进 t3_mem.md
 
 ## 已知风险（开发时要正视，不要假装没有）
@@ -400,18 +390,20 @@ Step 2 跑通的那次就是 baseline。记录轮次/时间/token。
 接受这个节奏：
 
 1. 改动后跑回归——确保没搞坏（即时反馈）
-2. root cause 是否修好——靠后续真实项目运行中 decision_log 不再出现同类记录（渐进闭环）
+2. root cause 是否修好——靠后续真实项目运行中 experience.md 不再出现同类记录（渐进闭环）
 3. 问题注入——留到积累了足够真实失败样本后再投入（天然素材比人造的好）
 
 ### 第五步：回归怎么自动验
 
 回归跑完后，"产出质量好不好"如果人必须看一遍就不算自动化。
 
-解法：给回归项目写独立的 acceptance test（puppeteer 从用户视角操作页面），和 harness 内部的 Arch/UAT 验证完全解耦。harness 验的是过程，acceptance test 验的是最终产品——两层独立。
+当时的解法是给回归项目写一份独立的验收脚本（puppeteer 从用户视角操作页面），和 harness 内部的 Arch/UAT 验证解耦——harness 验过程，脚本验最终产品。
+
+**后来推翻了**：被测项目每次都是重新生成的，外部脚本只能靠猜接口和 DOM 命名，误报远多于真问题（详见前文）。现在的判据是 harness 自己的 UAT 结果 + `uat_report.md` 与 story 的交叉验证；真正的"解耦"靠视角错开——UAT 不读 Dev 实现，从用户动线独立设计验收。
 
 ### 经验总结
 
 1. 先做能落地的，复杂方案等条件成熟再说。问题注入需要的前提（真实失败样本、成熟的 harness）现在都不具备
 2. 区分"即时回归"和"渐进闭环"，不要试图用一个机制同时解决两个时间尺度的问题
-3. 真实项目本身够复杂，只要 harness 有漏洞跑起来就会暴露——但这个信号体现在 decision_log 里，不是体现在"某次回归是否 pass"里
-4. 验证层和被验对象要解耦——acceptance test 独立于 harness，不受 harness 改动影响
+3. 真实项目本身够复杂，只要 harness 有漏洞跑起来就会暴露——但这个信号体现在 experience.md 里，不是体现在"某次回归是否 pass"里
+4. 验证层和被验对象要解耦，但解耦靠**视角错开**（谁交付、谁验收分开），不是靠一份写死的外部脚本——被测产物每次重新生成时，脚本钉的是设计从没约定过的实现细节，只会制造误报

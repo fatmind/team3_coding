@@ -30,7 +30,7 @@ interface RoleInfo {
 }
 
 const DEFAULT_ROLES: Record<string, RoleInfo> = {
-  human: { name: "Human", role: "member", isHuman: true, initial: "H", avatar: "", colorClass: "avatar-green" },
+  human: { name: "Human", role: "Human", isHuman: true, initial: "H", avatar: "", colorClass: "avatar-green" },
   arch: { name: "arch_1", role: "Architect", isHuman: false, initial: "A", avatar: "", colorClass: "avatar-green" },
   dev: { name: "dev_2", role: "Dev", isHuman: false, initial: "D", avatar: "", colorClass: "avatar-blue" },
   uat: { name: "uat_1", role: "UAT", isHuman: false, initial: "U", avatar: "", colorClass: "avatar-orange" },
@@ -42,6 +42,9 @@ const ROLE_COLORS: Record<string, string> = {
   uat: "avatar-orange",
   human: "avatar-green",
 };
+
+// Same format as api/chat/send — whole message wrapped in [rebase: ...]
+const REBASE_MSG_RE = /^\[rebase:\s*([\s\S]+?)\s*\]$/;
 
 interface ChatPanelProps {
   workspace: string;
@@ -223,19 +226,21 @@ export default function ChatPanel({ workspace }: ChatPanelProps) {
     const { cleanText, parsedTarget } = parseTarget(inputText);
     const messageText = cleanText.trim() || inputText.trim();
 
-    const actionMap: Record<string, string> = {
-      arch: "to_arch",
-      dev: "dev_do",
-      uat: "uat_design",
-    };
-    const action = actionMap[parsedTarget] || `to_${parsedTarget}`;
+    // Human chat is a pure-message channel: to_arch / to_dev / to_uat all
+    // reuse the agent's current session. Task dispatch (dev_do / uat_design /
+    // uat_check) is arch's job — humans talk, arch schedules.
+    const action = `to_${parsedTarget}`;
+
+    // Rebase special format: optimistic echo mirrors what the server will
+    // actually write (action=rebase, wrapper stripped) — no @, badge instead
+    const rebaseMatch = messageText.match(REBASE_MSG_RE);
 
     const localMessage: ChatMessage = {
-      action,
+      action: rebaseMatch ? "rebase" : action,
       from: "human",
-      to: parsedTarget,
+      to: rebaseMatch ? "T3" : parsedTarget,
       ts: Math.floor(Date.now() / 1000),
-      message: messageText,
+      message: rebaseMatch ? rebaseMatch[1] : messageText,
     };
     setMessages((prev) => [...prev, localMessage]);
     setInputText("");
@@ -268,11 +273,16 @@ export default function ChatPanel({ workspace }: ChatPanelProps) {
   }
 
   function getRoleInfo(from: string): RoleInfo {
+    // Daemon system messages: display as T3 with its own accent color
+    // ("daemon" kept for older actions.jsonl written before the rename)
+    if (from === "T3" || from === "daemon") {
+      return { name: "T3", role: "System", isHuman: false, initial: "T", avatar: "", colorClass: "avatar-purple" };
+    }
     // Check if it's human
     if (from === "human" || from === "fatmind") {
       return {
         name: humanConfig.name || "Human",
-        role: "member",
+        role: "Human",
         isHuman: true,
         initial: (humanConfig.name || "H").charAt(0).toUpperCase(),
         avatar: humanConfig.avatar,
@@ -319,25 +329,35 @@ export default function ChatPanel({ workspace }: ChatPanelProps) {
     return `${month}/${day} ${hours}:${minutes}`;
   }
 
-  function shouldShowHeader(index: number): boolean {
-    if (index === 0) return true;
-    const prev = messages[index - 1];
-    const curr = messages[index];
-    return prev.from !== curr.from;
+  // Agent sometimes writes a long message as one paragraph with zero newlines,
+  // which renders as an unreadable wall of text. If so, insert line breaks
+  // before structural markers (①②③…, mid-text 【…】, [reread: …]).
+  function autoBreak(text: string): string {
+    if (text.includes("\n") || text.length < 120) return text;
+    return text
+      .replace(/(?<=.)(?=[①②③④⑤⑥⑦⑧⑨⑩])/g, "\n")
+      .replace(/(?<=.)(?=【)/g, "\n")
+      .replace(/\s*(?=\[reread:)/g, "\n");
   }
 
   function renderMessageText(text: string | undefined | null, msg: ChatMessage) {
     if (!text) return null;
-    // Show "to" as @name prefix if different from "from"
     const parts: React.ReactNode[] = [];
-    // Add @target prefix if message has a "to" field and it's not the same as from
-    if (msg.to && msg.to !== msg.from && msg.to !== "human") {
+    // Rebase messages: no @ prefix — dedicated badge instead
+    const rebaseMatch = text.trim().match(REBASE_MSG_RE);
+    const isRebase = msg.action === "rebase" || !!rebaseMatch;
+    const bodyText = autoBreak(rebaseMatch ? rebaseMatch[1] : text);
+    if (isRebase) {
+      parts.push(<span key="rebase-badge" className="chat-rebase-badge">⟲ rebase</span>);
+      parts.push(<span key="rebase-space"> </span>);
+    } else if (msg.to && msg.to !== msg.from && msg.to !== "human") {
+      // Show "to" as @name prefix if different from "from"
       const displayName = getDisplayNameForTarget(msg.to);
       parts.push(<span key="to-mention" className="chat-mention">@{displayName}</span>);
       parts.push(<span key="to-space"> </span>);
     }
     // Parse inline @mentions
-    const textParts = text.split(/(@\w+)/g);
+    const textParts = bodyText.split(/(@\w+)/g);
     textParts.forEach((part, i) => {
       if (part.startsWith("@")) {
         parts.push(<span key={`t-${i}`} className="chat-mention">{part}</span>);
@@ -380,28 +400,21 @@ export default function ChatPanel({ workspace }: ChatPanelProps) {
         )}
         {messages.map((msg, i) => {
           const role = getRoleInfo(msg.from);
-          const showHeader = shouldShowHeader(i);
           return (
             <div
               key={`${msg.ts}-${i}`}
-              className={cn("chat-msg-row", !showHeader && "chat-msg-continued")}
+              className="chat-msg-row"
               data-testid={`chat-msg-${i}`}
             >
-              {showHeader ? (
-                <div className={cn("chat-avatar", role.colorClass)} data-testid="chat-avatar">
-                  {role.initial}
-                </div>
-              ) : (
-                <div className="chat-avatar-spacer" />
-              )}
+              <div className={cn("chat-avatar", role.colorClass)} data-testid="chat-avatar">
+                {role.initial}
+              </div>
               <div className="chat-msg-body">
-                {showHeader && (
-                  <div className="chat-msg-header">
-                    <span className="chat-msg-name">{role.name}</span>
-                    <span className="chat-msg-role">{role.role}</span>
-                    <span className="chat-msg-time">{formatTime(msg.ts)}</span>
-                  </div>
-                )}
+                <div className="chat-msg-header">
+                  <span className="chat-msg-name">{role.name}</span>
+                  <span className="chat-msg-role">{role.role}</span>
+                  <span className="chat-msg-time">{formatTime(msg.ts)}</span>
+                </div>
                 <div className="chat-msg-text">{renderMessageText(getMsgText(msg), msg)}</div>
               </div>
             </div>

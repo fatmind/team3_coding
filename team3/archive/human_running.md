@@ -7,35 +7,6 @@
 > 注：UAT Agent = 给 "被 team_coding3 开发出来的产品" 做业务 UAT，仅此一件事。对 team_coding3 这种工具性产品，我还是手动 dogfooding，否则 UAT 会陷入一个复杂嵌套中。
 > 注：实操，只用 UAT 生成 uat_stories.md，然后自己使用 team_coding3，按照 story 执行和验证，过程中开启 claude code 作为工具来辅助。
 
-## prompt 与打包
-
-设计见 `spec/packaging_design.md`。
-
-| | 手驱自开发（本文上半部分） | UI dogfood / 终端用户（本文下半部分） |
-|---|---|---|
-| prompt 源 | `--system-prompt-file human_coding/xxx_prompt.md` | `human_coding/` → `build/embed-prompts.js` → daemon 内联 |
-| 改 prompt 后 | 新 session 读最新文件 | `node build/embed-prompts.js`，重启 daemon |
-
-两种启动方式：
-
-```bash
-# 方式 1：源码 dogfood（开发者）
-cd team3
-node build/embed-prompts.js      # 生成 daemon/src/embedded-prompts.js；改 prompt 后必须重跑
-cd web
-npm run dev                      # http://localhost:3000
-
-# 方式 2：打包产物 dogfood / 终端用户
-cd team3
-bash build/build.sh                              # 产出 pkg/team3-x.y.z.tgz，不会自动安装
-npm install -g ./pkg/team3-*.tgz                # 必须加 ./，否则 npm 会当成 GitHub 仓库
-team3 start
-```
-
-注意：
-- `web/templates/agent/` 已；新项目初始化不再 copy prompt 到 `spec/agents/`。
-- 只打开 Web 页面不需要 prompt 文件；但从 Web 启动 daemon / agent 时，daemon 必须能加载 `daemon/src/embedded-prompts.js`，否则启动失败。
-
 ## 开发阶段，与自动化版的差异
 
 只列差异，其余完全按 `spec/app_design.md`。
@@ -55,14 +26,6 @@ team3 start
 > - **Dev**（预生成 10 个，每收一次 `dev_do` 顺序消耗下一个；`dev_fix` 沿用当前 runing 不换。当前 runing 是哪个，你自己记）：
 >     1. `8d37dc10-737f-4116-b0bc-a2a71dc986f0`
 >     2. `5de4f06e-eaf2-4a09-8699-564ecacbb42c`
->     3. `5a1078f6-46fc-4851-97c9-5f164184e38a`
->     4. `d0392895-3e0c-46ce-a486-fff3b183f0aa`
->     5. `86e0dbb8-43e1-44b3-9651-dae80270fd0d`
->     6. `4c91e613-c3ba-4542-92f0-b7d9df5ad43e`
->     7. `9f6e60d2-e906-43ed-9386-4c43817c6e5b`
->     8. `4d332708-719a-4ae5-98e7-e6ae24bd65ce`
->     9. `6ebf5dba-50f8-4ee6-a5d4-6999e80fa850`
->     10. `d4430666-e663-4357-bf45-2279db67f7aa`
 >
 > 用完 10 个就 `uuidgen | tr '[:upper:]' '[:lower:]'` 再生成。
 
@@ -126,32 +89,13 @@ Arch 输出 `uat_check: ... [reread: ...]`。**复制时把 reread 里的 `*_fea
 ## UAT 环节手动 dogfooding
 
 > 前提
-> - 已有一个被开发产品设计 `example/badminton/spec/app_design.md`，通过 team_coding3 自动化开发 badminton
-> - 开发链路已跑通（modules_progress.json 全 done），或者你要验证 team_coding3 当前状态
+> - 已有一个 `example/badminton/spec/app_design.md`，下来要通过 team_coding3 开发
 
-### 启动方式 A：源码 dogfood
+### 启动 team3：两种方式
 
-```bash
-cd team3
-node build/embed-prompts.js
-cd web
-npm run dev                  # http://localhost:3000
-```
+详见 @team3/usage.md
 
-适用：你在本仓库里改代码、改 prompt 后立刻验证。
-
-### 启动方式 B：打包产物 dogfood
-
-```bash
-cd team3
-bash build/build.sh
-npm install -g ./pkg/team3-*.tgz  # 必须加 ./；覆盖全局 team3
-team3 start
-```
-
-适用：验证终端用户安装后的真实体验。`build.sh` 只打包不安装——若之前装过旧版，必须重装 `.tgz` 才会跑到本次构建产物（见 `packaging_design.md`）。
-
-打开浏览器 → 选择/创建项目（如 `example/badminton`）
+### 打开浏览器 → 选择/创建项目（如 `example/badminton`）
 
 **验证环境就绪**：
 - 页面正常渲染（Page 1 群聊 + 文档区）
@@ -193,36 +137,3 @@ claude
 
 - **全部通过** → team_coding3 验证完成
 - **有失败** → 记录到 `spec/uat_report.md`（参考之前的报告格式），修复后重新验证对应 story
-
----
-
-## 源码 zip 打包（git archive）
-
-只打 git 已跟踪文件（`example/` 等已被 `.gitignore` 忽略，不会进包）。
-- **会打进包**：顶层目录 `draft/`、`team3/`，以及 `.gitignore`。
-- 跳过 `node_modules`、`.next`、`embedded-prompts.js` 等编译后产物。
-
-### 打包
-
-在 **仓库根目录**（`team_coding3/`）执行：
-
-```bash
-cd team_coding3
-git archive --format=zip HEAD -o team_coding3.zip
-```
-
-### 使用
-
-```bash
-# 确认文件
-unzip team_coding3.zip
-ls .gitignore draft team3   
-# 安装依赖
-cd team3
-npm install --prefix web && npm install --prefix daemon
-# build
-bash build/build.sh
-npm install -g ./pkg/team3-*.tgz
-# 启动 http://localhost:9001
-team3 start -p 9001
-```

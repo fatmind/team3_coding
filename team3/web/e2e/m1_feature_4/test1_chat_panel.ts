@@ -323,7 +323,7 @@ describe("Module 1 Feature #4: Page 1 群聊对话区", () => {
       }
       expect(matchingLine).toBeDefined();
       expect(matchingLine.to).toBe("uat");
-      expect(matchingLine.action).toBe("uat_design");
+      expect(matchingLine.action).toBe("to_uat");
       expect(matchingLine.from).toBe("human");
     });
   });

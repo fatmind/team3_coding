@@ -9,8 +9,8 @@
  * 5. Poll for completion: session UUID in .team3-project.json + arch online notification
  * 6. Return { arch: { sessionId } }
  *
- * Note: UAT agent is not initialized here. UAT is triggered later by human
- * sending uat_design when module design is complete.
+ * Note: UAT agent is not initialized here. UAT is triggered later by arch
+ * sending uat_design after all modules are done and regression passes.
  */
 
 import * as fs from "node:fs";

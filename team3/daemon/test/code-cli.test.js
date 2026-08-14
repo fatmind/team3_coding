@@ -30,6 +30,19 @@ describe('code-cli providers', () => {
       assert.strictEqual(p.command, 'qodercli');
     });
 
+    it('should honor a custom command override (e.g. qoderclicn)', () => {
+      const p = loadProvider({ type: 'qoder-code', command: 'qoderclicn' });
+      assert.strictEqual(p.name, 'qoder-code');
+      assert.strictEqual(p.command, 'qoderclicn');
+      assert.strictEqual(typeof p.buildArgs, 'function');
+    });
+
+    it('should not mutate the shared provider singleton when overriding command', () => {
+      loadProvider({ type: 'qoder-code', command: 'qoderclicn' });
+      const p = loadProvider({ type: 'qoder-code' });
+      assert.strictEqual(p.command, 'qodercli');
+    });
+
     it('should throw on unknown type', () => {
       assert.throws(() => loadProvider({ type: 'unknown' }), /Unknown codeCli type/);
     });

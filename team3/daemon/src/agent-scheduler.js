@@ -10,7 +10,7 @@ const config = require('./config');
 const { AgentQueue, mergeMessages } = require('./agent-queue');
 const { getInProgressModuleId } = require('./message-rewriter');
 const AgentLogger = require('./agent-logger');
-const { hasNewWritesSince, getFileOffset, extractActionFromResult, buildFallbackAction } = require('./reply-fallback');
+const { hasNewWritesSince, getFileOffset, extractActionFromResult, sanitizeExtractedAction, truncateFallbackMessage, writeViaCli } = require('./reply-fallback');
 const { formatLogTime } = require('./stdout-parser');
 const claudeCodeProvider = require('./code-cli/claude-code');
 
@@ -24,8 +24,8 @@ const HUMAN_DISPATCH_ACK_MESSAGE = 'get，开始处理中，稍等';
  * - Maintain per-agent FIFO queues (arch/dev/uat)
  * - Serial execution per agent, parallel across agents
  * - Spawn claude code with correct --session-id or --resume
- * - Dev session lifecycle: dev_do → new UUID, archive old; dev_fix → reuse current
- * - UAT session lifecycle: uat_check → new UUID, archive old; uat_fix → reuse current
+ * - Dev session lifecycle: dev_do → new UUID, archive old; dev_fix / to_dev → reuse current
+ * - UAT session lifecycle: uat_design / uat_check → new UUID, archive old; uat_fix / to_uat → reuse current
  * - Arch session lifecycle: bound_module + modules_progress in_progress → rotate on module switch
  * - Detect task completion (exit code 0)
  * - Merge queued messages when agent becomes idle
@@ -147,10 +147,10 @@ class AgentScheduler extends EventEmitter {
     const { action: actionType, to } = action;
 
     // Direct agent targets
-    if (actionType === 'dev_do' || actionType === 'dev_fix') {
+    if (actionType === 'dev_do' || actionType === 'dev_fix' || actionType === 'to_dev') {
       return 'dev';
     }
-    if (actionType === 'uat_check' || actionType === 'uat_fix') {
+    if (actionType === 'uat_check' || actionType === 'uat_fix' || actionType === 'to_uat') {
       return 'uat';
     }
     if (actionType === 'to_arch') {
@@ -724,6 +724,9 @@ class AgentScheduler extends EventEmitter {
 
   /**
    * Feature #14: Apply fallback using provider's extractResult.
+   * Mirrors reply-fallback.applyFallback: sanitize agent-claimed action,
+   * truncate over-long message, write through cli/write-action.mjs (single
+   * gate), direct append only when the CLI is unavailable.
    */
   _applyFallback({ stdout, role, spawnOffset }) {
     const resultText = this.provider.extractResult(stdout);
@@ -733,19 +736,24 @@ class AgentScheduler extends EventEmitter {
     if (hasNewWritesSince(this.actionsFilePath, spawnOffset, role)) {
       return { applied: false, action: null, reason: 'already-written' };
     }
-    let action = extractActionFromResult(resultText, role);
-    if (!action) {
-      action = buildFallbackAction(resultText, role);
-    }
+    const action = sanitizeExtractedAction(
+      extractActionFromResult(resultText, role), resultText, role
+    );
     if (!action.ts) {
       action.ts = Math.floor(Date.now() / 1000);
+    }
+    truncateFallbackMessage(action, role);
+
+    const gate = writeViaCli(action, this.actionsFilePath);
+    if (gate.ok) {
+      return { applied: true, action, reason: 'fallback-applied' };
     }
     try {
       fs.appendFileSync(this.actionsFilePath, JSON.stringify(action) + '\n');
     } catch (err) {
       return { applied: false, action, reason: `write-error: ${err.message}` };
     }
-    return { applied: true, action, reason: 'fallback-applied' };
+    return { applied: true, action, reason: `fallback-applied-direct (${gate.detail})` };
   }
 
   _isHumanInterrupt(action) {

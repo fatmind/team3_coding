@@ -35,8 +35,9 @@ class MessageRouter extends EventEmitter {
     this.daemon = options.daemon;
     this.isRunning = false;
 
-    // Agent roles that trigger ws push
-    this._agentRoles = new Set(['arch', 'dev', 'uat']);
+    // Roles whose messages trigger ws push
+    // (daemon included so rebase proposals/receipts reach web live)
+    this._agentRoles = new Set(['arch', 'dev', 'uat', 'daemon']);
 
     // Bind handler for cleanup
     this._onAction = this._handleAction.bind(this);

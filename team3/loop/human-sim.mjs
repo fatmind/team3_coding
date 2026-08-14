@@ -27,8 +27,13 @@ const CALL_TIMEOUT_MS = 120_000;
 const MAX_RETRIES = 2;
 
 // 进展停滞判定 & 推进节流
-const STALL_THRESHOLD_MS = 90_000;   // 无实质进展超过此值 → 考虑推进
-const NUDGE_COOLDOWN_MS = 90_000;    // 两次推进之间最小间隔
+// 「有进展」= action 级实质动作变化 或 agent 日志在增长（见 updateProgress）。
+// 后者是关键：agent 写代码/跑测试/起服务时不产生 action，但 stream-json 日志一直在写；
+// 只看 action 会把"正在干活的长 session"误判为停滞、nudge 一下就把它 SIGINT 打断重来。
+// 阈值 5min 衡量的是「日志真正静默」多久——正常干活每几秒写一行、计时器持续被刷新，
+// 只有 session 卡死/崩溃（长时间无任何日志输出）才会触发 nudge。
+const STALL_THRESHOLD_MS = 300_000;  // 日志/动作静默超过此值 → 考虑推进
+const NUDGE_COOLDOWN_MS = 300_000;   // 两次推进之间最小间隔
 const MAX_NUDGES = 6;                // 连续无进展时最多推进次数（安全上限）
 
 // 纯 ack / “处理中”回执（agent 收到人类消息后的秒回，产品设计如此）。
@@ -45,11 +50,14 @@ function loadCodeCliCommand() {
   }
 }
 
-// action / to：把消息路由给某个 agent（对齐 web ChatPanel 的 actionMap）
+// action / to：把消息路由给某个 agent（对齐 web ChatPanel 的人类纯消息通道）
+// to_arch / to_dev / to_uat 都是"人类说一句话"：daemon 复用对方当前 session，
+// 不新建、不归档——回答提问和提醒继续都适用。派活（dev_do/uat_design/uat_check）
+// 是 arch 的职责，human-sim 作为人类不直接派活。
 function routeTo(role) {
   if (role === 'arch') return { action: 'to_arch', to: 'arch' };
-  if (role === 'uat') return { action: 'uat_design', to: 'uat' };
-  if (role === 'dev') return { action: 'dev_do', to: 'dev' };
+  if (role === 'uat') return { action: 'to_uat', to: 'uat' };
+  if (role === 'dev') return { action: 'to_dev', to: 'dev' };
   return null;
 }
 
@@ -69,10 +77,11 @@ function buildSystemPrompt(designText) {
 （B）项目协调者：当流程卡住、没人推进时，你要发出明确指令把它推向下一步。
 
 你需要理解 team3 的协作流程（据此判断“下一步该谁做什么”）：
-- Arch（架构/PM）：拆 module 与 feature、派 dev_do/dev_fix 给 Dev；所有 module 都 done 后，读 spec/uat_stories.md 逐个发 uat_check [uat-story: N] 进入验收。
+- Arch（架构/PM）：拆 module 与 feature、派 dev_do/dev_fix 给 Dev；所有 module 都 done 且回归通过后，发 uat_design 让 UAT 设计用户故事；人类确认 stories 后，发 uat_check 开考令进入验收。
 - Dev：实现被指派的 feature，完成后用 to_arch 向 Arch 交付。
-- UAT：收到 arch 的 uat_check [uat-story: N] 才进入 MODE B 黑盒验收；全部 Story 通过后 to_human「产品验收通过 N/M」。
-- 常见卡点：所有 module 已 done，但 Arch 没有发 uat_check，UAT 一直空等 —— 这时应指令 Arch 立即按 uat_stories.md 发 uat_check。
+- UAT：收到 arch 的 uat_design 写 spec/uat_stories.md 并请人类 review（你收到后要果断确认或给修改意见）；收到 uat_check 后按 stories 全量逐个黑盒验收，完成后 to_arch 汇报。
+- 你确认 stories 的方式：回消息给 Arch（如「stories 我确认了，开始验收」），Arch 会发 uat_check。
+- 常见卡点：所有 module 已 done，但 Arch 没发 uat_design；或 stories 已确认，Arch 没发 uat_check —— 这时应指令 Arch 推进对应下一步。
 
 输出规则（严格遵守）：
 - 若对方消息只是**状态汇报/待命/寒暄**、并没有真正需要你决策的问题：只输出一个词 [SKIP]，不要输出任何别的内容。（回复这类消息会造成无限空转）
@@ -87,6 +96,7 @@ ${designText}
 export function createHumanSim({ workspace, superman = false, logger = (m) => process.stdout.write(m + '\n') }) {
   const absWorkspace = path.resolve(workspace);
   const specDir = path.join(absWorkspace, 'spec');
+  const logsDir = path.join(absWorkspace, 'logs');
   const actionsPath = path.join(specDir, 'actions.jsonl');
   const designPathDefault = path.join(specDir, 'app_design.md');
   const stateFile = path.join(absWorkspace, '.human-sim-state.json');
@@ -100,6 +110,7 @@ export function createHumanSim({ workspace, superman = false, logger = (m) => pr
 
   // 进展跟踪
   let lastProgressSig = null;
+  let lastLogSig = null;
   let lastProgressTs = Date.now();
   let lastNudgeTs = 0;
   let nudgeCount = 0;
@@ -173,10 +184,34 @@ export function createHumanSim({ workspace, superman = false, logger = (m) => pr
     return JSON.stringify({ devWork, uatWork, archDispatch, delivery, mp, report });
   }
 
+  // agent 日志活跃度签名：logs/{arch,dev,uat}*.log 的总字节数 + 最新 mtime。
+  // agent 每次工具调用返回都会往 stream-json 日志追加内容，所以只要它在干活（写代码、
+  // 跑测试、等 server 起来后拿到结果），这个签名就会变——据此判断"还活着"，而不是看 action。
+  function agentLogActivity() {
+    let bytes = 0, latest = 0;
+    let files = [];
+    try { files = fs.readdirSync(logsDir); } catch { return '0:0'; }
+    for (const f of files) {
+      if (!f.endsWith('.log')) continue;
+      const role = f.split(/[_.]/)[0];
+      if (role !== 'arch' && role !== 'dev' && role !== 'uat') continue;
+      try {
+        const st = fs.statSync(path.join(logsDir, f));
+        bytes += st.size;
+        if (st.mtimeMs > latest) latest = st.mtimeMs;
+      } catch {}
+    }
+    return `${bytes}:${Math.round(latest)}`;
+  }
+
   function updateProgress() {
     const sig = progressSignature();
-    if (sig !== lastProgressSig) {
+    const logSig = agentLogActivity();
+    // 有进展 = action 级实质动作变化 或 agent 日志在增长/刷新。任一变化即重置停滞计时，
+    // 保证"正在干活的长 session"不被误判停滞；只有两者都静默满 5min 才会 nudge。
+    if (sig !== lastProgressSig || logSig !== lastLogSig) {
       lastProgressSig = sig;
+      lastLogSig = logSig;
       lastProgressTs = Date.now();
       nudgeCount = 0; // 有进展 → 重置推进计数
     }
@@ -241,33 +276,56 @@ export function createHumanSim({ workspace, superman = false, logger = (m) => pr
     logger(`[reply→${routing.to}] ${reply.slice(0, 80).replace(/\n/g, ' ')}${reply.length > 80 ? '…' : ''}`);
   }
 
-  // 流程停滞时主动推进：让 LLM 判断“该谁做什么”，输出 JSON {to, message}
+  // 停滞时该提醒谁：actions.jsonl 最后一条 to 是 arch/dev/uat 的消息，那个角色就欠下一个动作。
+  // 跳过 note（纯回执噪音）。不需要 LLM 推断——实测 LLM 生成的指令经常是错的
+  // （如判定"dev 卡死了 arch 你接管代写"，被 arch 正确顶回），笨而正确好过像样却错误。
+  function pendingRole() {
+    const actions = allActions();
+    for (let i = actions.length - 1; i >= 0; i--) {
+      const a = actions[i];
+      if (a.action === 'note') continue;
+      if (a.to === 'arch' || a.to === 'dev' || a.to === 'uat') return a.to;
+    }
+    return null;
+  }
+
+  // 通用提醒语：只提醒"继续推进"，不臆测卡住原因、不指派动作 —— agent 自己清楚该干什么。
+  const NUDGE_MESSAGE = '你这边的动作停了 5 分钟以上。请检查你自己的进度，若无需人类决策的，请继续努力完成你的工作。';
+
+  // 冷启动：项目刚建好，还没有任何发给 agent 的消息 —— 这不是"卡住"，
+  // 而是"用户还没说第一句话"。用正常的需求陈述开场，不要用催办语气。
+  function needsKickoff() {
+    return pendingRole() === null;
+  }
+
+  function kickoff() {
+    const routing = routeTo('arch');
+    const message = [
+      '你好，我们开始做这个项目。产品设计我已经写进 spec/app_design.md 了。请先认真读一遍，看完按你的流程执行。',
+      '过程中需要我拍板的地方直接问我。',
+    ].join('\n');
+    appendAction(routing, message);
+    lastNudgeTs = Date.now(); // 与 nudge 共用冷却，避免刚开场就紧接着催
+    logger('[kickoff→arch] 项目开场：已把需求交给 Arch');
+  }
+
   async function nudge() {
     const stalledSec = Math.round((Date.now() - lastProgressTs) / 1000);
-    const prompt = `系统检测到项目已约 ${stalledSec}s 没有实质进展（没有新的开发/验收动作，只有空转或等待）。\n\n【项目现状】\n${projectState()}\n\n作为项目协调者，判断现在应由谁来推进、做什么，把项目推向下一步（例如：所有 module 已 done 但没进 UAT，就该让 arch 立即发 uat_check [uat-story: N]）。\n\n只输出一行 JSON，不要任何其它文字：\n{"to":"arch|dev|uat|null","message":"给该角色的明确、可执行指令"}\n若确实无需干预则输出 {"to":null}。`;
-    const raw = callWithRetry(prompt);
-    if (!raw) { logger('[nudge] 生成推进指令失败'); return; }
-
-    let obj = null;
-    const m = raw.match(/\{[\s\S]*\}/);
-    if (m) { try { obj = JSON.parse(m[0]); } catch {} }
-    if (!obj || !obj.to || obj.to === 'null') {
-      // LLM 认为无需干预：也计入次数并延长冷却，避免“无需干预”无限刷屏
+    const role = pendingRole();
+    if (!role) {
       lastNudgeTs = Date.now();
       nudgeCount++;
-      logger(`[nudge] LLM 判定无需干预（第 ${nudgeCount}/${MAX_NUDGES} 次，不再频繁重试）`);
+      logger(`[nudge] actions.jsonl 里没有待动作的角色，跳过（第 ${nudgeCount}/${MAX_NUDGES} 次）`);
       return;
     }
 
-    const routing = routeTo(obj.to);
-    if (!routing) { logger(`[nudge] 非法目标: ${obj.to}`); return; }
-    const message = (obj.message || '').trim();
-    if (!message) { logger('[nudge] 空指令，跳过'); return; }
+    const routing = routeTo(role);
+    const message = `${NUDGE_MESSAGE}（已静默约 ${stalledSec}s）`;
 
     appendAction(routing, message);
     lastNudgeTs = Date.now();
     nudgeCount++;
-    logger(`[nudge→${routing.to} #${nudgeCount}] ${message.slice(0, 90).replace(/\n/g, ' ')}${message.length > 90 ? '…' : ''}`);
+    logger(`[nudge→${routing.to} #${nudgeCount}] 已静默 ${stalledSec}s`);
   }
 
   // 读取 offset 之后的新行，返回需要处理的 to_human 问题（from ∈ arch/dev/uat）
@@ -306,6 +364,7 @@ export function createHumanSim({ workspace, superman = false, logger = (m) => pr
       loadState();
       loadDesign(designPath);
       lastProgressSig = progressSignature();
+      lastLogSig = agentLogActivity();
       lastProgressTs = Date.now();
       logger(`human-sim 启动: workspace=${absWorkspace}, cli=${command}, once=${once}`);
 
@@ -327,13 +386,20 @@ export function createHumanSim({ workspace, superman = false, logger = (m) => pr
           return retry.length;
         }
 
-        // 停滞检测：无实质进展超过阈值 + 冷却已过 + 未超推进上限 → 主动推进
+        // 停滞检测：日志+动作静默超过阈值 + 冷却已过 + 未超推进上限 → 主动推进
         const stalledMs = Date.now() - lastProgressTs;
-        if (stalledMs > STALL_THRESHOLD_MS && Date.now() - lastNudgeTs > NUDGE_COOLDOWN_MS && nudgeCount < MAX_NUDGES) {
-          logger(`[stall] 已 ${Math.round(stalledMs / 1000)}s 无实质进展，尝试推进（第 ${nudgeCount + 1}/${MAX_NUDGES} 次）`);
-          await nudge();
-          updateProgress();
-          saveState();
+        if (stalledMs > STALL_THRESHOLD_MS && Date.now() - lastNudgeTs > NUDGE_COOLDOWN_MS) {
+          if (needsKickoff()) {
+            // 项目还没开场（没有任何发给 agent 的消息）：正常提需求，不占催办配额
+            kickoff();
+            updateProgress();
+            saveState();
+          } else if (nudgeCount < MAX_NUDGES) {
+            logger(`[stall] 已 ${Math.round(stalledMs / 1000)}s 日志/动作静默，尝试推进（第 ${nudgeCount + 1}/${MAX_NUDGES} 次）`);
+            await nudge();
+            updateProgress();
+            saveState();
+          }
         }
 
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

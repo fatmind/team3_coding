@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vote-app 评测报告</title>
+<style>
+  :root{
+    --bg:#faf9f7; --card:#ffffff; --ink:#1b1d21; --ink2:#42454b;
+    --muted:#8f9096; --line:#eae7e2; --line2:#f1efeb;
+    --accent:#ff4e2e; --accent-soft:#fff2ee; --accent-ink:#e0653f;
+    --bar-v:#ffb59e; --bar-b:#d3d7de; --track:#f3f1ed;
+    --good:#2fa079; --good-soft:#eaf6f1; --good-ink:#1f8562;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:64px 24px 80px;}
+  .hero{text-align:center;margin-bottom:30px;}
+  .hero h1{font-size:56px;font-weight:800;letter-spacing:-1.5px;margin:0 0 18px;line-height:1.05;}
+  .hero h1 .accent{color:var(--accent);}
+  .hero .tagline{font-size:22px;font-weight:700;color:var(--ink);margin:0 auto 10px;max-width:720px;letter-spacing:-.3px;}
+  .hero .sub{font-size:15px;color:var(--muted);margin:0;}
+  .meta-quote{border-left:3px solid var(--line);padding:4px 0 4px 20px;margin:0 0 46px;color:var(--muted);font-size:13.5px;}
+  .meta-quote div{padding:3px 0;} .meta-quote b{color:var(--ink2);font-weight:600;}
+  section{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:30px 34px;margin-top:22px;}
+  .sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
+  h2{font-size:22px;font-weight:800;letter-spacing:-.4px;margin:0;}
+  .sec-tag{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:3px 10px;border-radius:20px;}
+  .hint{color:var(--muted);font-size:13.5px;margin:8px 0 22px;}
+  .legend{display:flex;gap:18px;margin:0 0 6px;font-size:12px;color:var(--muted);}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px;}
+  .legend .d1{background:var(--bar-v);} .legend .d2{background:var(--bar-b);}
+  .cmp-row{display:grid;grid-template-columns:180px 1fr;gap:20px;align-items:center;padding:15px 4px;border-bottom:1px solid var(--line2);}
+  .cmp-row:last-child{border-bottom:none;}
+  .cmp-metric{font-size:14px;font-weight:700;color:var(--ink2);}
+  .cmp-metric small{display:block;font-weight:500;color:var(--muted);font-size:12px;}
+  .cmp-bars{display:flex;flex-direction:column;gap:8px;}
+  .bar-line{display:grid;grid-template-columns:52px 1fr 130px;gap:12px;align-items:center;}
+  .bar-name{font-size:11.5px;font-weight:600;color:var(--muted);text-align:right;}
+  .bar-track{background:var(--track);border-radius:8px;height:18px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:8px;}
+  .bar-fill.v118{background:var(--bar-v);} .bar-fill.base{background:var(--bar-b);}
+  .bar-val{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .bar-val.hi{color:var(--accent-ink);} .bar-val.lo{color:var(--good-ink);} .bar-val.tie{color:var(--muted);}
+  .ratio-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px;}
+  .ratio{flex:1;min-width:150px;background:var(--accent-soft);border-radius:12px;padding:14px 16px;}
+  .ratio .n{font-size:24px;font-weight:800;color:var(--accent);letter-spacing:-.5px;}
+  .ratio .t{font-size:12.5px;color:var(--ink2);margin-top:2px;}
+  .frame-q{background:#f6f4f0;border-radius:14px;padding:16px 20px;font-size:15px;font-weight:700;color:var(--ink);text-align:center;}
+  .frame-arrow{text-align:center;color:var(--muted);font-size:13px;margin:14px 0;font-weight:600;}
+  .lenses{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  @media(max-width:760px){.lenses{grid-template-columns:1fr;}}
+  .lens{border:1px solid var(--line);border-radius:16px;padding:20px 18px;}
+  .lens .idx{font-size:12px;font-weight:800;color:var(--accent);letter-spacing:1px;}
+  .lens h4{margin:8px 0 6px;font-size:16px;font-weight:800;}
+  .lens p{margin:0;font-size:13px;color:var(--ink2);}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--line2);}
+  thead th{background:#f6f4f0;color:var(--ink);font-weight:700;font-size:12px;}
+  thead th:first-child{border-top-left-radius:12px;} thead th:last-child{border-top-right-radius:12px;}
+  td.metric{font-weight:700;color:var(--ink2);}
+  td.num,th.num{font-variant-numeric:tabular-nums;text-align:right;}
+  tr.hl td{background:var(--accent-soft);}
+  tr.total td{font-weight:700;border-top:2px solid var(--line);}
+  .colgrp{color:var(--accent-ink);} .colgrp.b{color:var(--muted);}
+  td.desc{color:var(--ink2);font-size:13px;}
+  td.desc ul{margin:8px 0 2px;padding-left:20px;} td.desc li{margin:4px 0;}
+  td.desc code,.badcase code{background:#f3f1ed;border-radius:5px;padding:1px 6px;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}
+  .corr{display:inline-block;font-size:12px;font-weight:700;padding:2px 10px;border-radius:20px;white-space:nowrap;}
+  .corr.pos{color:var(--good-ink);background:var(--good-soft);}
+  .corr.neg{color:var(--accent-ink);background:var(--accent-soft);}
+  .badcase{font-size:14px;color:var(--ink2);}
+  .badcase h3{font-size:17px;font-weight:800;color:var(--ink);margin:22px 0 8px;}
+  .badcase h4{font-size:15px;font-weight:800;color:var(--ink);margin:18px 0 6px;}
+  .badcase h5{font-size:13.5px;font-weight:700;color:var(--ink2);margin:14px 0 4px;}
+  .badcase h6{font-size:13px;font-weight:700;color:var(--ink);margin:12px 0 4px;}
+  .badcase p{margin:8px 0;} .badcase b{color:var(--ink);}
+  .badcase ul{margin:8px 0 8px;padding-left:22px;} .badcase li{margin:4px 0;}
+  .badcase hr{border:none;border-top:1px solid var(--line);margin:20px 0;}
+  .badcase>h3:first-child,.badcase>h4:first-child{margin-top:0;}
+  .cols-2{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+  @media(max-width:760px){.cols-2{grid-template-columns:1fr;}}
+  .note{background:#faf7f3;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;padding:13px 16px;margin-top:18px;font-size:13.5px;color:var(--ink2);}
+  .note b{color:var(--accent-ink);}
+  .verdict-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:4px;}
+  @media(max-width:760px){.verdict-grid{grid-template-columns:1fr;}}
+  .vcard{border:1px solid var(--line);border-radius:16px;padding:22px 22px 8px;}
+  .vcard.good{background:var(--good-soft);border-color:#d5ebe1;}
+  .vcard.bad{background:var(--accent-soft);border-color:#f7ddd4;}
+  .vcard h3{margin:0 0 14px;font-size:16px;font-weight:800;}
+  .vcard.good h3{color:var(--good-ink);} .vcard.bad h3{color:var(--accent-ink);}
+  .vlist{list-style:none;counter-reset:v;padding:0;margin:0;}
+  .vlist li{counter-increment:v;position:relative;padding:0 0 16px 34px;font-size:14px;color:var(--ink2);}
+  .vlist li::before{content:counter(v);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;font-size:12px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;}
+  .vcard.good .vlist li::before{background:var(--good);}
+  .vcard.bad .vlist li::before{background:var(--accent);}
+  .vlist li b{color:var(--ink);}
+  .lead{font-size:16px;font-weight:800;color:var(--ink);margin:2px 0 20px;}
+  footer{color:var(--muted);font-size:12px;text-align:center;margin-top:34px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <h1>vote-app <span class="accent">评测报告</span></h1>
+    <p class="tagline">Qwen 模型上线前评测 · team3 多 Agent 协作 Benchmark</p>
+    <p class="sub">被测模型与基线的一次自主开发全流程对比</p>
+  </div>
+
+  <blockquote class="meta-quote">
+    <div><b>评测窗口</b>　2026-08-05 18:56:52 → 2026-08-05 19:42:33</div>
+    <div><b>Benchmark</b>　loop/vote-app/app_design.min.md</div>
+    <div><b>被测模型</b>　bailian/pg/qwen-latest-series-invite-beta-v113</div>
+    <div><b>对照基线</b>　dfmodel（DeepSeek V4 Flash）</div>
+  </blockquote>
+
+  <section>
+    <div class="sec-head"><h2>评测基准介绍</h2><span class="sec-tag">Benchmark</span></div>
+    <p class="hint">本评测不是"图片分类"式的大样本打分集，而是一个<b>任务型自主开发基准</b>：给定一份产品设计文档，让 team3 的多 Agent（arch 架构 / dev 开发 / uat 验收 / judge 裁判 + 模拟真人）从零协作，把产品实际写出来并跑通验收。衡量的是"模型驱动一个真实软件项目端到端落地"的综合能力。</p>
+    <table>
+      <thead><tr><th>项</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td class="metric">任务命题</td><td class="desc">vote-app —— 类问卷/投票产品的自主开发（Next.js 全栈）</td></tr>
+        <tr><td class="metric">设计文档</td><td class="desc"><code>loop/vote-app/app_design.min.md</code></td></tr>
+        <tr><td class="metric">验收规模</td><td class="desc">1 个 story、4 个场景，须全部通过并生成 uat_report</td></tr>
+        <tr><td class="metric">评测方式</td><td class="desc">同一 Benchmark，基线模型与被测模型各自独立自主跑一次，全程真实执行、不干预</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>评测方法与指标含义</h2><span class="sec-tag">指标定义</span></div>
+    <p class="hint">两个模型都完成任务时，高下体现在"过程代价"。下表列出全部指标及其<b>相关方向</b>——正相关越高越好、负相关越低越好，这也是后面判断被测哪项退化的依据。</p>
+    <table>
+      <thead><tr><th>指标</th><th>相关方向</th><th>含义</th></tr></thead>
+      <tbody><tr><td class="metric">任务完成率</td><td><span class="corr pos">正相关（越高越好）</span></td><td class="desc">产品是否被自主开发并通过验收，衡量「能不能做成」。</td></tr><tr><td class="metric">Story 一次性通过</td><td><span class="corr pos">正相关（越高越好）</span></td><td class="desc">验收 story 全部通过、uat_report 正常生成，衡量交付完整度。</td></tr><tr><td class="metric">Token 消耗</td><td><span class="corr neg">负相关（越低越好）</span></td><td class="desc">完成任务累计消耗的 token，直接对应算力成本。</td></tr><tr><td class="metric">任务耗时</td><td><span class="corr neg">负相关（越低越好）</span></td><td class="desc">各 Agent 实际执行的总时长，衡量效率。</td></tr><tr><td class="metric">LLM 请求数</td><td><span class="corr neg">负相关（越低越好）</span></td><td class="desc">完成任务发起的大模型请求总数，衡量过程绕不绕。</td></tr><tr><td class="metric">Agent 交互次数</td><td><span class="corr neg">负相关（越低越好）</span></td><td class="desc">多 Agent 之间派发/汇报的动作总数，衡量协作是否冗长。</td></tr><tr><td class="metric">返工次数</td><td><span class="corr neg">负相关（越低越好）</span></td><td class="desc">被架构打回重做 + 验收阶段自修，衡量「一次做对」的能力。</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>评测结果总览</h2><span class="sec-tag">被测 vs 基线</span></div>
+    <p class="hint">同一 Benchmark 各跑一次的核心指标。成本 / 耗时类越短越好。数据来源：eval.min.compare.20260805.md（被测）、eval.min.baseline.20260805.md（基线）。</p>
+    <div class="legend"><span><i class="d1"></i>被测 · bailian/pg/qwen-latest-series-invite-beta-v113</span><span><i class="d2"></i>基线 · dfmodel</span></div>
+    
+    <div class="cmp-row">
+      <div class="cmp-metric">结果准确率<small>任务完成率</small></div>
+      <div class="cmp-bars">
+        <div class="bar-line"><span class="bar-name">被测</span><div class="bar-track"><div class="bar-fill v118" style="width:100%"></div></div><span class="bar-val tie">100%</span></div>
+        <div class="bar-line"><span class="bar-name">基线</span><div class="bar-track"><div class="bar-fill base" style="width:100%"></div></div><span class="bar-val">100%</span></div>
+      </div>
+    </div>
+    <div class="cmp-row">
+      <div class="cmp-metric">Tokens 消耗</div>
+      <div class="cmp-bars">
+        <div class="bar-line"><span class="bar-name">被测</span><div class="bar-track"><div class="bar-fill v118" style="width:100%"></div></div><span class="bar-val hi">224,783</span></div>
+        <div class="bar-line"><span class="bar-name">基线</span><div class="bar-track"><div class="bar-fill base" style="width:95.1%"></div></div><span class="bar-val">213,822</span></div>
+      </div>
+    </div>
+    <div class="cmp-row">
+      <div class="cmp-metric">任务耗时<small>仅 agent 执行</small></div>
+      <div class="cmp-bars">
+        <div class="bar-line"><span class="bar-name">被测</span><div class="bar-track"><div class="bar-fill v118" style="width:100%"></div></div><span class="bar-val hi">49m 37s</span></div>
+        <div class="bar-line"><span class="bar-name">基线</span><div class="bar-track"><div class="bar-fill base" style="width:46.2%"></div></div><span class="bar-val">22m 54s</span></div>
+      </div>
+    </div>
+    <div class="cmp-row">
+      <div class="cmp-metric">总 LLM 请求数</div>
+      <div class="cmp-bars">
+        <div class="bar-line"><span class="bar-name">被测</span><div class="bar-track"><div class="bar-fill v118" style="width:100%"></div></div><span class="bar-val hi">131</span></div>
+        <div class="bar-line"><span class="bar-name">基线</span><div class="bar-track"><div class="bar-fill base" style="width:99.2%"></div></div><span class="bar-val">130</span></div>
+      </div>
+    </div>
+    <div class="cmp-row">
+      <div class="cmp-metric">Agent 交互次数<small>总 action 数</small></div>
+      <div class="cmp-bars">
+        <div class="bar-line"><span class="bar-name">被测</span><div class="bar-track"><div class="bar-fill v118" style="width:73.7%"></div></div><span class="bar-val lo">14</span></div>
+        <div class="bar-line"><span class="bar-name">基线</span><div class="bar-track"><div class="bar-fill base" style="width:100%"></div></div><span class="bar-val">19</span></div>
+      </div>
+    </div>
+    <div class="ratio-row"><div class="ratio"><div class="n">≈1.1×</div><div class="t">Token 消耗 vs 基线</div></div><div class="ratio"><div class="n">≈2.2×</div><div class="t">任务耗时 vs 基线</div></div><div class="ratio"><div class="n">≈1×</div><div class="t">LLM 请求数 vs 基线</div></div></div>
+    <div class="note">完成率两边都是 <b>100%</b>；差异不在「能不能做成」，而在「做成的代价」——被测在成本、耗时、请求上的相对倍数见上。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>怎么看这份评测</h2></div>
+    <p class="hint">既然结果都满分，评价模型好坏就得钻进「过程」。下面从三个角度拆开看，每个角度对应一个要回答的问题。</p>
+    <div class="frame-q">两个模型都完成了任务 —— 光看结果分不出高下，得拆开「过程」看差异</div>
+    <div class="frame-arrow">↓ 从三个维度观察</div>
+    <div class="lenses">
+      <div class="lens"><div class="idx">01 / 资源开销</div><h4>贵不贵、慢不慢</h4><p>做成这件事烧了多少 Token、花了多少时间、发了多少次请求。衡量「效率成本」。</p></div>
+      <div class="lens"><div class="idx">02 / 协作行为</div><h4>顺不顺、啰不啰嗦</h4><p>多 Agent 之间来回交互了多少次、谁在推进。衡量「过程是否冗长」。</p></div>
+      <div class="lens"><div class="idx">03 / 二次返工</div><h4>稳不稳、走没走弯路</h4><p>有没有被架构打回、有没有自己返修。衡量「一次做对的能力」。</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>资源开销</h2><span class="sec-tag">01 · 贵不贵、慢不慢</span></div>
+    <p class="hint">把耗时、Token、请求按四个角色（arch 架构 / dev 开发 / uat 验收 / judge 裁判）拆开，看开销压在哪里。</p>
+    <table>
+      <thead><tr><th>角色</th><th class="num colgrp">被测耗时</th><th class="num colgrp b">基线耗时</th><th class="num colgrp">被测 Token</th><th class="num colgrp b">基线 Token</th><th class="num colgrp">被测请求</th><th class="num colgrp b">基线请求</th></tr></thead>
+      <tbody><tr><td class="metric">arch 架构</td><td class="num">8m 39s</td><td class="num">6m 53s</td><td class="num">60,229</td><td class="num">79,774</td><td class="num">37</td><td class="num">67</td></tr><tr class="hl"><td class="metric">dev 开发</td><td class="num">26m 43s</td><td class="num">8m 15s</td><td class="num">117,356</td><td class="num">75,199</td><td class="num">62</td><td class="num">36</td></tr><tr><td class="metric">uat 验收</td><td class="num">12m 36s</td><td class="num">7m 24s</td><td class="num">45,761</td><td class="num">57,901</td><td class="num">29</td><td class="num">25</td></tr><tr><td class="metric">judge 裁判</td><td class="num">1m 40s</td><td class="num">0m 21s</td><td class="num">1,437</td><td class="num">948</td><td class="num">3</td><td class="num">2</td></tr><tr class="total"><td class="metric">合计</td><td class="num">49m 37s</td><td class="num">22m 54s</td><td class="num">224,783</td><td class="num">213,822</td><td class="num">131</td><td class="num">130</td></tr></tbody>
+    </table>
+    <div class="note">开销集中在 <b>dev 开发</b>：被测的 dev 占了总耗时 <b>54%</b>、Token <b>52%</b>、请求 <b>47%</b> —— 变慢变贵主要发生在写代码这一步。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>协作行为</h2><span class="sec-tag">02 · 顺不顺、啰不啰嗦</span></div>
+    <p class="hint">多 Agent 之间的动作总数与分布，交互越多通常意味着推进越碎、往返越频繁。</p>
+    <div class="cols-2">
+      <table>
+        <thead><tr><th>按任务类型</th><th class="num">被测</th><th class="num">基线</th></tr></thead>
+        <tbody><tr><td>to_arch</td><td class="num">5</td><td class="num">7</td></tr><tr class="hl"><td>note</td><td class="num">2</td><td class="num">3</td></tr><tr><td>dev_do</td><td class="num">2</td><td class="num">2</td></tr><tr><td>to_human</td><td class="num">2</td><td class="num">3</td></tr><tr><td>uat_design</td><td class="num">1</td><td class="num">1</td></tr><tr><td>to_uat</td><td class="num">1</td><td class="num">1</td></tr><tr><td>uat_check</td><td class="num">1</td><td class="num">2</td></tr><tr class="total"><td>合计</td><td class="num">14</td><td class="num">19</td></tr></tbody>
+      </table>
+      <table>
+        <thead><tr><th>按发送方</th><th class="num">被测</th><th class="num">基线</th></tr></thead>
+        <tbody><tr><td>arch</td><td class="num">6</td><td class="num">9</td></tr><tr><td>uat</td><td class="num">4</td><td class="num">5</td></tr><tr><td>human</td><td class="num">2</td><td class="num">3</td></tr><tr><td>dev</td><td class="num">2</td><td class="num">2</td></tr><tr class="total"><td>合计</td><td class="num">14</td><td class="num">19</td></tr></tbody>
+      </table>
+    </div>
+    <div class="note">交互总量 14 vs 19。交互越多，通常意味着推进节奏更碎、往返更频繁。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>二次返工</h2><span class="sec-tag">03 · 稳不稳、走没走弯路</span></div>
+    <p class="hint">返工分两种：被架构打回重做（dev_fix / uat_fix），或验收阶段自己发现问题返修（UAT 自修）。</p>
+    <table>
+      <thead><tr><th>返工维度</th><th class="num">被测</th><th class="num">基线</th></tr></thead>
+      <tbody>
+        <tr><td class="metric">Arch 派发 dev_fix</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td class="metric">Arch 派发 uat_fix</td><td class="num">0</td><td class="num">0</td></tr>
+        <tr><td class="metric">UAT 自修轮次</td><td class="num">0</td><td class="num">0</td></tr>
+      </tbody>
+    </table>
+    <div class="note">被测 dev 返工 0 次、UAT 自修 0 轮；基线 dev 返工 0 次、UAT 自修 0 轮。返工位置不同，反映"一次做对"的能力差异。</div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>Badcase 深度分析</h2><span class="sec-tag">前后对比 · 归因</span></div>
+    <p class="hint">以基线为参照，聚焦被测<b>退化的指标</b>（更慢 / 更费 / 更绕 / 返工），由模型基于两边的<b>真实执行轨迹</b>（各角色 session 轨迹 + 段日志 + 百炼 requestId）分析根因。以下内容为模型产出。</p>
+    <div class="badcase"><h3>Badcase 分析：Qwen-latest-series-invite-beta-v118 vs 基线</h3>
+<h4>结论速览</h4>
+<p>被测功能全部达成（任务完成率 100%、Story 一次通过、零返工），但<b>任务耗时退化 2.2x</b>（22m54s → 49m37s），问题几乎全在 <b>dev 角色</b>。根因是行为习惯而非能力：dev 把长思考摊到每一步、执行步长过碎，加上少量工具绕路，"轮次多 × 单轮慢"相乘拖出 2.2x。（Token 仅多 5%，属正常波动，不作分析。）</p>
+<h4>现象分析</h4>
+<h5>现象1：任务耗时退化 2.2x，全部压在 dev 角色</h5>
+<p>被测总耗时 22m54s → 49m37s（2.2x）。差出的 27 分钟里，dev 一个角色就占了 18.5 分钟（495s → 1,603s，+1,108s），arch/uat 基本无退化。dev 耗时 = 请求数 62 vs 36（+72%）× 单请求平均耗时 25.9s vs 13.75s（+88%），相乘 ≈ 3.2x，与实测吻合——即"轮次更多 × 单轮更慢"双升相乘。</p>
+<p><b>证据</b></p>
+<p>1、长思考拖慢每一轮：被测 dev1 请求间隔 p90=106s、中位 21s、最慢单轮 129s；基线 dev1 p90=11s、中位 0s（连续工具调用），除开头 136s 大规划外没超过 28s。被测 &gt;3000 字符的长思考 11 次 vs 基线 3 次，"中等思考"轮次（3k-6k 字符）每次要等 30-60s、出现 8 次。</p>
+<p>2、行为性绕路推高轮次：① 读错路径——dev1 第 1 轮读 <code>/tmp/t3-regress/vote-app/dev-tech-stack.md</code> 报 <code>File does not exist</code>，下一轮才改绝对路径（1 次无效请求），基线一次成功；② e2e 配置折腾——先 Edit <code>vitest.config.ts</code> 再新建 <code>vitest.e2e.config.ts</code> 再分别跑，多花 3-4 轮并留下基线没有的产物 <code>vitest.e2e.config.ts</code>、<code>tsconfig.tsbuildinfo</code>，基线直接 <code>npm test</code> + 一条 node 脚本一轮过；③ e2e 脚本反复调试——dev2 对 <code>e2e/feature_2/test1_create_api.mjs</code> 连续 Read 7 次、Edit 3 次才跑通，基线一次写对；④ 步长过碎——TaskUpdate 一次一个请求单独成轮（dev1 有 9 次），基线批量放进同一条消息。</p>
+<p>3、数据来源：轨迹 <code>eval.min.evidence.20260805</code> 的 dev 会话，对照被测/基线的 <code>request-ids.jsonl</code> 时间戳、各轮 assistant 消息，以及两模型保留工程目录的产物 diff（多余的 <code>vitest.e2e.config.ts</code> 等可证）。</p>
+<p><b>根因</b></p>
+<p>三层叠加——(a) 单轮思考过长且分散，拖慢每一轮；(b) 轮次多（小步化 + 多余的配置/调试往返）；(c) 少量工具绕路（读错路径、另起 vitest 配置）。三者都是行为习惯，不是理解或编码能力（最终代码正确、e2e 全绿、零返工）。</p></div>
+  </section>
+
+  <section>
+    <div class="sec-head"><h2>测试模型评价</h2><span class="sec-tag">被测</span></div>
+    <p class="lead">一句话：活能干成、质量达标，但明显更慢、更费、更绕。</p>
+    <div class="verdict-grid">
+      <div class="vcard good"><h3>表现好的地方</h3><ul class="vlist"><li><b>结果达标。</b>任务完成率 100%，和基线打平，没有因为提速或省事而牺牲最终交付。</li><li><b>交付完整。</b>1/1 story 全部通过，uat_report 正常生成，验收链路走完整、没漏环节。</li></ul></div>
+      <div class="vcard bad"><h3>表现差的地方</h3><ul class="vlist"><li><b>太费。</b>Token 消耗是基线的约 1.1×（224,783 vs 213,822），同样的活烧了更多钱。</li><li><b>太慢。</b>总耗时约 2.2×（49m 37s vs 22m 54s），瓶颈集中在写代码的 dev 阶段。</li></ul></div>
+    </div>
+    <div class="note" style="border-left-color:var(--muted);">注：以上评价由本报告真实指标自动推导；单次运行样本有限，正式回流建议同一 Benchmark 多次取均值后再定论。</div>
+  </section>
+
+  <footer>数据来源：eval.min.compare.20260805.md（被测）/ eval.min.baseline.20260805.md（基线）· team3/loop/vote-app · 真实指标呈现，未做数据编造。</footer>
+
+</div>
+</body>
+</html>

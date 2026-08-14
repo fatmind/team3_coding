@@ -107,6 +107,16 @@ describe('AgentScheduler', () => {
       assert.strictEqual(target, 'arch');
     });
 
+    it('should route to_dev to dev (human pure-message channel)', () => {
+      const target = scheduler._resolveTarget({ action: 'to_dev', to: 'dev' });
+      assert.strictEqual(target, 'dev');
+    });
+
+    it('should route to_uat to uat (human pure-message channel)', () => {
+      const target = scheduler._resolveTarget({ action: 'to_uat', to: 'uat' });
+      assert.strictEqual(target, 'uat');
+    });
+
     it('should return null for to_human', () => {
       const target = scheduler._resolveTarget({ action: 'to_human', to: 'human' });
       assert.strictEqual(target, null);
@@ -137,6 +147,22 @@ describe('AgentScheduler', () => {
       const result = scheduler._resolveSession('dev', messages);
 
       assert.strictEqual(result.sessionId, '1111-2222-3333-4444-555555555555');
+      assert.strictEqual(result.isNew, false);
+    });
+
+    it('to_dev (human message) should reuse current sessionId, never archive', () => {
+      const messages = [{ action: 'to_dev', from: 'human', message: '补充信息' }];
+      const result = scheduler._resolveSession('dev', messages);
+
+      assert.strictEqual(result.sessionId, '1111-2222-3333-4444-555555555555');
+      assert.strictEqual(result.isNew, false);
+    });
+
+    it('to_uat (human message) should reuse current sessionId, never archive', () => {
+      const messages = [{ action: 'to_uat', from: 'human', message: 'stories 修改意见' }];
+      const result = scheduler._resolveSession('uat', messages);
+
+      assert.strictEqual(result.sessionId, 'ffff-0000-1111-2222-333333333333');
       assert.strictEqual(result.isNew, false);
     });
 
@@ -519,6 +545,7 @@ describe('AgentScheduler', () => {
       const interruptScheduler = new AgentScheduler({
         projectJsonPath,
         specDir,
+        actionsFilePath: path.join(specDir, 'actions.jsonl'),
         uuidFn: () => 'new-uuid-0000-0000-000000000001',
         spawnFn: (cmd, args, opts) => {
           spawnCount++;
@@ -581,6 +608,7 @@ describe('AgentScheduler', () => {
       const devScheduler = new AgentScheduler({
         projectJsonPath,
         specDir,
+        actionsFilePath: path.join(specDir, 'actions.jsonl'),
         uuidFn: () => 'new-uuid-0000-0000-000000000001',
         spawnFn: (cmd, args, opts) => {
           spawnCount++;

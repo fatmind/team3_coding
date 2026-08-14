@@ -184,11 +184,12 @@ describe("ChatPanel", () => {
       expect(screen.getByText("please fix the bug")).toBeTruthy();
     });
 
-    // Should have sent to dev, not arch
+    // Should have sent to dev, not arch — human chat is the pure-message
+    // channel (to_dev), it must NOT dispatch a new task (dev_do)
     const sendCall = mockFetch.mock.calls[1];
     const body = JSON.parse(sendCall[1].body);
     expect(body.to).toBe("dev");
-    expect(body.action).toBe("dev_do");
+    expect(body.action).toBe("to_dev");
     expect(body.message).toBe("please fix the bug");
   });
 

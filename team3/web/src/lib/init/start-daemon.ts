@@ -212,7 +212,12 @@ export async function startDaemon(
   fs.mkdirSync(logsDir, { recursive: true });
 
   // Redirect daemon stdout/stderr to log file (not pipe — prevents EPIPE on web exit)
-  const logPath = path.join(logsDir, "daemon-stdout.log");
+  // Dated like other logs (daemon_/arch_ etc.); fd is fixed at spawn, so the date
+  // reflects daemon start time — each restart opens/append the current day's file
+  const stamp = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const dateStr = `${stamp.getFullYear()}-${pad(stamp.getMonth() + 1)}-${pad(stamp.getDate())}`;
+  const logPath = path.join(logsDir, `daemon-stdout_${dateStr}.log`);
   const logFd = fs.openSync(logPath, "a");
 
   const child: ChildProcess = spawn(process.execPath, [daemonEntry], {

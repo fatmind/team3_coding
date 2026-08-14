@@ -70,6 +70,12 @@ for f in "$TOOL_DIR/cli/"*.mjs; do
   [ -f "$f" ] && cp "$f" "$TOOL_DIR/pkg/assets/cli/"
 done
 
+# Reference docs ({ref} placeholder resolves here in packaged mode)
+mkdir -p "$TOOL_DIR/pkg/assets/ref"
+for f in dev-tech-stack.md dev-html-prototype.md dev-ui.md dev-init-sh.md arch-ui.md uat-scaffold.md; do
+  cp "$TOOL_DIR/human_coding/$f" "$TOOL_DIR/pkg/assets/ref/"
+done
+
 # Remove dev-only files from server (CLAUDE.md, design docs, etc.)
 find "$TOOL_DIR/pkg/server" -maxdepth 1 -name "*.md" -delete 2>/dev/null || true
 rm -rf "$TOOL_DIR/pkg/server/templates" 2>/dev/null || true

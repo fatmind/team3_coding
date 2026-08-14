@@ -306,17 +306,17 @@ Anthropic 的 prompt 缓存是**按内容前缀的哈希**存在服务端的，�
 
 ```
 L1  role + 协议 + STEP 流程      所有项目所有 session 通用，最稳，放最前
-L2  app_design + module_X       项目级，基本定稿，很稳
-L3  progress + decision_log      天天变，放后面
+L2  app_design + module_X + decisions   项目级，基本定稿/生效快照 ≤20 条，很稳
+L3  progress + experience        天天变，放后面
 L4  本次任务 + [reread]          每次都不同，放最后
 ```
 
-排序：`app_design`（定稿了不动）在前，`decision_log`（每次踩坑都写）在最后。
+排序：`app_design`（定稿了不动）在前，`experience.md`（每次踩坑都写）在最后。（注：原方案写的 decision_log 已拆成 decisions.md + experience.md——前者是 ≤20 条生效决策、归 L2 稳层，后者才是高频变动层。）
 
 ### 三个落地动作
 
 1. **6 个文件从"agent 自己 Read"改成"daemon 拼 prompt 时直接塞进开头"**。顺带干掉 Read 的返回内容、路径幻觉、多余轮次，三重收益。
-2. **注入顺序**：app_design → module_X → feature_list → progress → decision_log（稳的在前）。
+2. **注入顺序**：app_design → module_X → decisions → feature_list → progress → experience（稳的在前）。
 3. **调度上让同一项目的 session 密集连着跑**，趁上一个 session 写的缓存还没过期就命中。
 
 ### 前置要求

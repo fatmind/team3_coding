@@ -32,7 +32,10 @@ describe('E2E: Daemon structured logging (Feature #18)', { timeout: 30_000 }, ()
     projectJsonPath = path.join(workspaceDir, '.team3-project.json');
     specDir = path.join(workspaceDir, 'spec');
     actionsFile = path.join(specDir, 'actions.jsonl');
-    daemonLogPath = path.join(workspaceDir, 'logs', 'daemon.log');
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    daemonLogPath = path.join(workspaceDir, 'logs', `daemon_${today}.log`);
 
     fs.mkdirSync(path.join(specDir, 'agents'), { recursive: true });
     fs.writeFileSync(path.join(specDir, 'agents', 'arch_prompt.md'), '# Arch');

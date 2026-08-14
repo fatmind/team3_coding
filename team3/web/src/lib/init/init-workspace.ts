@@ -129,7 +129,8 @@ const SKELETON_DIRS: string[] = ["spec", "cli", "uat", "logs"];
 const SKELETON_FILES: Record<string, string> = {
   "spec/app_design.md": "# App Design\n\n> Write your product architecture here.\n",
   "spec/actions.jsonl": "",
-  "spec/decision_log.md": "# Decision Log\n",
+  "spec/decisions.md": "# 生效的人类决策\n",
+  "spec/experience.md": "# Agent 经验教训\n",
 };
 
 const CLI_FILES: string[] = [
@@ -138,6 +139,7 @@ const CLI_FILES: string[] = [
   "browser.mjs",
   "watchdog.mjs",
   "write-action.mjs",
+  "experience.mjs",
   "validate-uat-evidence.mjs",
   "init-ui-rules.mjs",
   "init-ui-rules-core.mjs",
@@ -157,7 +159,7 @@ function getCliSourceDir(): string {
 
 /**
  * Resolve team3/ source directory (sibling of web/, parent of cli/).
- * Used to copy human_coding/tech-stack.md and cli/init.sh.template into new projects.
+ * Used to copy cli/init.sh.template into new projects.
  */
 function getTeam3SourceDir(): string {
   if (process.env.TEAM3_PKG_DIR) {
@@ -168,12 +170,11 @@ function getTeam3SourceDir(): string {
 
 /**
  * Scaffold files copied from team3/ source into the new project root.
- * - tech-stack.md: Next.js / env cleanup / deps policy (single source of truth)
  * - init.sh: from cli/init.sh.template, renamed to init.sh and chmod +x
+ * Reference docs (dev-tech-stack.md etc.) are NOT copied — agents read them
+ * from the team3 package via the {ref} placeholder in system prompts.
  */
 const SCAFFOLD_FILES: { source: string; dest: string; executable?: boolean }[] = [
-  { source: "human_coding/tech-stack.md", dest: "tech-stack.md" },
-  { source: "human_coding/html-prototype-trans-template.md", dest: "html-prototype-trans-template.md" },
   { source: "cli/init.sh.template", dest: "init.sh", executable: true },
 ];
 
@@ -184,15 +185,6 @@ function writeIfNotExists(filePath: string, content: string): void {
   const dir = path.dirname(filePath);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(filePath, content, "utf-8");
-  const stat = fs.statSync(filePath);
-  // Best-effort executable bit (used for init.sh template)
-  if ((stat.mode & 0o111) === 0) {
-    try {
-      fs.chmodSync(filePath, 0o755);
-    } catch {
-      // Ignore on platforms/filesystems that don't support chmod
-    }
-  }
 }
 
 /**
@@ -222,7 +214,7 @@ export function initWorkspace(workspacePath: string): void {
     }
   }
 
-  // Copy team3/ scaffold (human_coding/tech-stack.md, cli/init.sh.template)
+  // Copy team3/ scaffold (cli/init.sh.template)
   const team3Src = getTeam3SourceDir();
   for (const { source, dest, executable } of SCAFFOLD_FILES) {
     const src = path.join(team3Src, source);

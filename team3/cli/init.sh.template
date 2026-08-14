@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # init.sh — team3 业务项目启动脚本（模板）
 #
-# 遵循 ./tech-stack.md（harness 下发到项目根）的硬约束：
+# 遵循 dev-tech-stack.md（Dev 通过 system prompt 的 {ref} 从 team3 包内读取）的硬约束：
 #   1. 启动前 env -u 清理父进程污染
 #   2. 端口 3001 写死，不读 PORT 环境变量
 #   3. start|stop|restart 三个子命令
@@ -30,12 +30,12 @@ PID_FILE=".pids/dev.pid"
 LOG_DIR="logs"
 LOG_FILE="${LOG_DIR}/dev.log"
 
-# ---- 父进程污染清理（tech-stack.md §2）----
+# ---- 父进程污染清理（dev-tech-stack.md §2）----
 # 这些变量被父进程/daemon 泄漏到子进程会污染 next dev：
 #   __NEXT_PRIVATE_STANDALONE_CONFIG — 父 next.config 路径
 #   __NEXT_PRIVATE_ORIGIN — 父 origin
 #   NEXT_DEPLOYMENT_ID — 父 deployment id
-#   TURBOPACK=1 — 与 --webpack 冲突
+#   TURBOPACK — 父进程泄漏的值，清掉后走 Next 16 默认（Turbopack）
 #   NODE_PATH — 模块路径污染
 #   NODE_ENV — 父可能为 production 导致 npm install 跳过 devDeps
 CLEAN_ENV=(env -u __NEXT_PRIVATE_STANDALONE_CONFIG \
@@ -95,9 +95,9 @@ cmd_start() {
   # 3. 准备目录
   mkdir -p "$(dirname "${PID_FILE}")" "${LOG_DIR}"
 
-  # 4. 启动（带 env 清理 + 显式 NODE_ENV=development + 显式禁用 TURBOPACK）
-  NODE_ENV=development TURBOPACK= nohup "${CLEAN_ENV[@]}" \
-    npx next dev --port "${APP_DEV_PORT}" --webpack \
+  # 4. 启动（带 env 清理 + 显式 NODE_ENV=development，Next 16 默认 Turbopack，不传打包器参数）
+  NODE_ENV=development nohup "${CLEAN_ENV[@]}" \
+    npx next dev --port "${APP_DEV_PORT}" \
     >"${LOG_FILE}" 2>&1 &
   local pid=$!
   echo "${pid}" > "${PID_FILE}"

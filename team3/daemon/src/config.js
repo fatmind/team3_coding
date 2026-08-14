@@ -31,6 +31,8 @@ const config = {
   claudeRetryDelayMs: parseInt(process.env.CLAUDE_RETRY_DELAY_MS || '5000', 10),
   // Maximum number of retries before dead letter (default 3)
   claudeMaxRetries: parseInt(process.env.CLAUDE_MAX_RETRIES || '3', 10),
+  // Rebase archive-scan agent timeout (default 15min)
+  rebaseTimeoutMs: parseInt(process.env.REBASE_TIMEOUT_MS || '900000', 10),
   // Feature #19: Per-role inactivity timeout: arch=5min, dev/uat=15min
   claudeInactivityTimeoutMs: {
     arch: parseInt(process.env.CLAUDE_INACTIVITY_TIMEOUT_MS_ARCH || process.env.CLAUDE_INACTIVITY_TIMEOUT_MS || '900000', 10),

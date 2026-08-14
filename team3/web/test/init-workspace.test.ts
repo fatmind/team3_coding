@@ -119,11 +119,18 @@ describe("initWorkspace", () => {
     expect(writtenFiles.get(filePath)).toBe("");
   });
 
-  it("creates spec/decision_log.md", () => {
+  it("creates spec/decisions.md", () => {
     initWorkspace(WORKSPACE);
-    const filePath = path.join(WORKSPACE, "spec/decision_log.md");
+    const filePath = path.join(WORKSPACE, "spec/decisions.md");
     expect(writtenFiles.has(filePath)).toBe(true);
-    expect(writtenFiles.get(filePath)).toContain("# Decision Log");
+    expect(writtenFiles.get(filePath)).toContain("生效的人类决策");
+  });
+
+  it("creates spec/experience.md", () => {
+    initWorkspace(WORKSPACE);
+    const filePath = path.join(WORKSPACE, "spec/experience.md");
+    expect(writtenFiles.has(filePath)).toBe(true);
+    expect(writtenFiles.get(filePath)).toContain("Agent 经验教训");
   });
 
   it("does NOT create spec/modules_progress.json", () => {
@@ -222,10 +229,10 @@ describe("initWorkspace", () => {
     expect(writtenFiles.has(path.join(WORKSPACE, "spec/actions.jsonl"))).toBe(false);
   });
 
-  it("does NOT overwrite existing spec/decision_log.md", () => {
-    existingFiles.add(path.join(WORKSPACE, "spec/decision_log.md"));
+  it("does NOT overwrite existing spec/decisions.md", () => {
+    existingFiles.add(path.join(WORKSPACE, "spec/decisions.md"));
     initWorkspace(WORKSPACE);
-    expect(writtenFiles.has(path.join(WORKSPACE, "spec/decision_log.md"))).toBe(false);
+    expect(writtenFiles.has(path.join(WORKSPACE, "spec/decisions.md"))).toBe(false);
   });
 
   it("creates all skeleton + CLI scaffold files in one call", () => {
@@ -234,7 +241,8 @@ describe("initWorkspace", () => {
     const expectedFiles = [
       path.join(WORKSPACE, "spec/app_design.md"),
       path.join(WORKSPACE, "spec/actions.jsonl"),
-      path.join(WORKSPACE, "spec/decision_log.md"),
+      path.join(WORKSPACE, "spec/decisions.md"),
+      path.join(WORKSPACE, "spec/experience.md"),
       path.join(WORKSPACE, ".team3-project.json"),
       ...CLI_FILES.map((file) => path.join(WORKSPACE, `cli/${file}`)),
     ];

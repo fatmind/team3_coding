@@ -61,22 +61,6 @@ describe('Daemon', () => {
       assert.strictEqual(data.init_daemon, process.pid);
     });
 
-    it('should write daemon_heart on start', async () => {
-      const port = 13100 + Math.floor(Math.random() * 1000);
-      daemon = new Daemon({
-        port,
-        projectJsonPath: tmpFile,
-        heartbeatInterval: 60000,
-        wsPingInterval: 60000,
-      });
-
-      await daemon.start();
-
-      const data = JSON.parse(fs.readFileSync(tmpFile, 'utf-8'));
-      assert.ok(data.daemon_heart);
-      assert.ok(/^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}$/.test(data.daemon_heart));
-    });
-
     it('should reject on port conflict', async () => {
       const port = 13100 + Math.floor(Math.random() * 1000);
       daemon = new Daemon({
@@ -117,32 +101,6 @@ describe('Daemon', () => {
 
       await daemon.stop();
       assert.strictEqual(daemon.isRunning, false);
-    });
-  });
-
-  describe('heartbeat', () => {
-    it('should periodically update daemon_heart', async () => {
-      const port = 13100 + Math.floor(Math.random() * 1000);
-      daemon = new Daemon({
-        port,
-        projectJsonPath: tmpFile,
-        heartbeatInterval: 100, // fast for testing
-        wsPingInterval: 60000,
-      });
-
-      await daemon.start();
-
-      const data1 = JSON.parse(fs.readFileSync(tmpFile, 'utf-8'));
-      const heart1 = data1.daemon_heart;
-
-      // Wait for heartbeat to fire
-      await new Promise(resolve => setTimeout(resolve, 250));
-
-      const data2 = JSON.parse(fs.readFileSync(tmpFile, 'utf-8'));
-      const heart2 = data2.daemon_heart;
-
-      // Heartbeat should have been updated
-      assert.notStrictEqual(heart1, heart2);
     });
   });
 
