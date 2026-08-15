@@ -1,0 +1,26 @@
+#!/bin/sh
+# 自动为提交信息附加 Claude co-author trailer。
+# 配置方式（仓库根目录）：
+#   git config core.hooksPath team3/.githooks
+#
+# 跳过场景：merge / squash 提交（保留 Git 自动生成的合并信息）
+# 去重：若提交信息中已存在 Claude co-author，则不重复添加。
+# 另注意：`--amend` 场景下 $2="commit"，若 trailer 已存在会被去重逻辑跳过。
+
+MSG_FILE="$1"
+SOURCE="$2"
+
+case "$SOURCE" in
+  merge|squash)
+    exit 0
+    ;;
+esac
+
+if grep -qi "^Co-authored-by: Claude" "$MSG_FILE"; then
+  exit 0
+fi
+
+cat >> "$MSG_FILE" <<'EOF'
+
+Co-authored-by: Claude <noreply@anthropic.com>
+EOF
