@@ -1,19 +1,21 @@
-# team3/web — Web 控制台
+# team3/web — Web Console
 
-team3 的 Web 控制台（Next.js App Router），用于查看协作进度、收发消息、管理 agent 任务。
+The web console for team3 (Next.js App Router) — watch collaboration progress, exchange messages, and manage agent tasks.
 
-## 开发启动
+**English** | [简体中文](README.zh-CN.md)
+
+## Development
 
 ```bash
 cd team3/web
 npm install
 TEAM3_SUPERMAN=1 PORT=9001 npm run dev
-# 打开 http://localhost:9001
+# Open http://localhost:9001
 ```
 
-> 入口与打包方式见仓库根 [README](../README.md) 与 `spec/usage.md`。
+See the repo root [README](../README.md) and `spec/usage.md` for entry points and packaging.
 
-## 设计规范
+## Design System
 
-- UI 遵循 [DESIGN-LANGUAGE.md](DESIGN-LANGUAGE.md)（StyleSeed 设计语言，Mintlify 风格）
-- 开发约束见 [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)
+- UI follows [DESIGN-LANGUAGE.md](DESIGN-LANGUAGE.md) (StyleSeed design language, Mintlify style)
+- Dev constraints: [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md)
