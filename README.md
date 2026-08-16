@@ -10,6 +10,8 @@ An agent isn't a tool you rent per task. It's a teammate with a memory, a role, 
 
 **English** | [简体中文](README.zh-CN.md)
 
+> **Why "team3"?** Three agents — Architect, Dev, UAT — and a Chinese saying: *三生万物*, "from three, all things are born." Three agents, one shared memory, and a team that keeps growing into more than the sum of its parts.
+
 ---
 
 ## Why we built it
