@@ -1,56 +1,68 @@
-# team3 — An AI-Agent-Driven Software Development Workflow
+# team3 — where humans and agents build together
 
-> A 1+1+1+1 human–AI collaboration: **Human + Architect + Dev + UAT** working together through an **app → module → feature → uat** pipeline to build products continuously.
+Most AI coding tools treat the agent like a vending machine. Type a prompt, get code out, done.
+
+We see it differently.
+
+An agent isn't a tool you rent per task. It's a teammate with a memory, a role, and a seat at the table — one that comes back day after day, picks up where it left off, and gets sharper as the project grows.
+
+**team3** is a workflow that turns "you + your coding agents" into a real team: **1 Human + 1 Architect + 1 Dev + 1 UAT**, four roles with one job — build your product, from **app → module → feature → uat**, and keep building it.
 
 **English** | [简体中文](README.zh-CN.md)
 
-team3 lets "a human + multiple AI agents" collaborate on software development like a real team. The human only sets direction and makes decisions; the Architect decomposes requirements, dispatches tasks, and reviews acceptance; the Dev writes code and self-tests; the UAT independently validates the product from a black-box, user-centric perspective. All roles communicate through `spec/actions.jsonl`, and a daemon schedules every agent session.
+---
 
-## The Problem
+## Why we built it
 
-Three pain points when using AI coding tools (Claude Code / Cursor / Codex, etc.) for commercial product development:
+If you've shipped with AI agents, you've probably felt this:
 
-- **The human becomes the dispatcher** — coordinating context across multiple sessions and copying requirements by hand; team3 handles inter-agent context and messaging for you
-- **Acceptance relies on manual testing** — without checkpoints or UAT, humans can't manually verify features faster than AI produces them; team3 bakes checkpoints and black-box UAT into the flow
-- **No sustained collaboration** — one-off, single-feature coding can't improve the way human collaboration does over time; team3 supports long-term iteration across features and modules
+- **You're the dispatcher.** Three sessions open, context copied by hand from one window to the next, requirements re-pasted every morning. The agents work hard — you work harder keeping them in sync.
+- **You're the tester.** No checkpoints, no UAT. Just you, clicking through features by hand, trying to verify faster than the AI can produce. You can't.
+- **And it never compounds.** Every task starts from zero. Nobody remembers last week's decisions. It's like working with brilliant strangers who forget you overnight.
 
-## Core Concepts
+team3 fixes exactly this — not by wrapping a better code model, but by giving the team a shared memory and a workflow that outlives any single session.
 
-| Role | Responsibility |
-|---|---|
-| **Human** | Product ideas, architecture direction, requirements, daily acceptance feedback (only the human maintains `spec/app_design.md`) |
-| **Architect** | Requirement breakdown, task dispatch, acceptance review, state management, UAT trigger (writes no business code) |
-| **Dev** | Coding, unit/integration tests, self-verification and fixing, delivery (a dedicated session per task to avoid context pollution) |
-| **UAT** | Black-box validation from the user's perspective; doesn't read Dev code; no mocks or stubs allowed |
+## How it works
 
-## Features
+A product gets built the way a real team builds it:
 
-- **Four-role protocol** — clear role boundaries, a single source of truth for human decisions (`spec/decisions.md`), lessons learned distilled into `spec/experience.md`
-- **Daemon scheduler** — action watching, session queueing/scheduling, message routing, rebase, state persistence, watchdog
-- **CLI toolchain** — `init` / `write-action` / `experience` / `simulate_human` / `validate-uat-evidence` and more
-- **Web console** — a Next.js dashboard to watch progress and exchange messages in real time
-- **Evaluation tooling** — `loop/` provides eval / regression / badcase tools to continuously assess agent performance
-- **Packaging & release** — `build/build.sh` produces a globally-installable tgz; `team3 start` launches in one command
+1. **The human decides.** The idea, the direction, the judgment calls — they come from you. Nobody overrides you. `spec/app_design.md` is yours alone to maintain.
+2. **The Architect plans.** It breaks your idea into modules and features, dispatches the work, reviews what comes back, and decides when it's ready for acceptance.
+3. **The Dev builds.** Each task gets its own fresh session — clean context, unit tests, self-verification, delivery. No cross-session contamination.
+4. **The UAT judges.** From the user's point of view, black-box. It doesn't read the Dev's code, doesn't use mocks, and shows no mercy. If it doesn't feel right to a user, back it goes.
 
-## Directory Layout
+They talk through `spec/actions.jsonl` — a shared inbox you're always part of. A daemon keeps every session alive, scheduled, and aware of where the project stands.
+
+The result: the agents aren't tools anymore. They're teammates who remember — and the longer you work together, the better the team gets.
+
+## What you get
+
+- **One team, four roles** — clear boundaries, decisions kept in a single authoritative file (`spec/decisions.md`), and every hard-won lesson distilled into `spec/experience.md` so nobody repeats a mistake.
+- **A daemon that babysits** — watches actions, queues and schedules sessions, routes messages, rebases, persists state, and watches for the dead (literally — it has a watchdog).
+- **A CLI for everything** — `init`, `write-action`, `experience`, `simulate_human`, `validate-uat-evidence`…
+- **A web console** — watch progress and talk to the team in real time.
+- **An eval loop** — `loop/` runs evals, regressions, and badcase drills, so you can watch the team get measurably better.
+- **Ships like a real product** — `build/build.sh` produces a globally-installable package; `team3 start` and you're live.
+
+## Layout
 
 ```text
 team3_coding/
 ├── README.md
 ├── LICENSE
-├── draft/                # Early-stage ideas and discussion notes (process docs)
+├── draft/                # early-stage ideas & discussion notes
 └── team3/
     ├── bin/              # team3 CLI entry
-    ├── build/            # Packaging scripts
-    ├── cli/              # Toolchain (init / write-action / experience ...)
-    ├── daemon/           # Agent scheduler
+    ├── build/            # packaging scripts
+    ├── cli/              # toolchain (init / write-action / experience …)
+    ├── daemon/           # the agent scheduler
     ├── human_coding/     # Architect / Dev / UAT role prompts
-    ├── loop/             # Evaluation tooling (eval / regression / badcase)
-    ├── spec/             # Design docs and protocol definitions
+    ├── loop/             # evaluation tooling (eval / regression / badcase)
+    ├── spec/             # design docs & protocol definitions
     └── web/              # Next.js web console
 ```
 
-## Quick Start
+## Quick start
 
 ```bash
 # Build and install globally
@@ -63,7 +75,7 @@ team3 start -p 9001
 # Open http://localhost:9001
 ```
 
-Dev mode (source dogfooding):
+Dev mode (dogfooding from source):
 
 ```bash
 cd team3
@@ -74,9 +86,9 @@ TEAM3_SUPERMAN=1 PORT=9001 npm run dev
 
 ## Documentation
 
-- `team3/spec/` — design docs and protocol definitions (`app_design.md`, `packaging_design.md`, `usage.md`, ...)
-- `team3/human_coding/` — the three role prompts and workflow reference (`team3.md` is the authoritative protocol)
-- `draft/` — early-stage ideas and discussion notes (process docs; see [draft/README.md](draft/README.md))
+- `team3/spec/` — design docs and protocol definitions (`app_design.md`, `packaging_design.md`, `usage.md`, …)
+- `team3/human_coding/` — the three role prompts and the workflow reference (`team3.md` is the authoritative protocol)
+- `draft/` — early-stage ideas and discussion notes (see [draft/README.md](draft/README.md))
 
 ## License
 
