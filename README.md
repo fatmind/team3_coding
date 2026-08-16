@@ -1,10 +1,6 @@
 # team3 — where humans and agents build together
 
-Most AI coding tools treat the agent like a vending machine. Type a prompt, get code out, done.
-
-We see it differently.
-
-An agent isn't a tool you rent per task. It's a teammate with a memory, a role, and a seat at the table — one that comes back day after day, picks up where it left off, and gets sharper as the project grows.
+An agent isn't a tool you rent per task. It's a teammate with a memory, a role — one that comes back day after day, picks up where it left off, and gets sharper as the project grows.
 
 **team3** is a workflow that turns "you + your coding agents" into a real team: **1 Human + 1 Architect + 1 Dev + 1 UAT**, four roles with one job — build your product, from **app → module → feature → uat**, and keep building it.
 
