@@ -44,24 +44,6 @@ team3 解决的正是这些——不是靠换一个更强的模型，而是给�
 - **一套评估循环** —— `loop/` 跑 eval、regression、badcase，你能亲眼看着团队一点点变好。
 - **像真产品一样交付** —— `build/build.sh` 产出可全局安装的包；`team3 start`，上线。
 
-## 目录结构
-
-```text
-team3_coding/
-├── README.md
-├── LICENSE
-├── draft/                # 早期想法与讨论笔记
-└── team3/
-    ├── bin/              # team3 CLI 入口
-    ├── build/            # 打包脚本
-    ├── cli/              # 工具链（init / write-action / experience …）
-    ├── daemon/           # Agent 调度器
-    ├── human_coding/     # Architect / Dev / UAT 角色 prompt
-    ├── loop/             # 评估体系（eval / regression / badcase）
-    ├── spec/             # 设计文档与协议定义
-    └── web/              # Next.js Web 控制台
-```
-
 ## 快速开始
 
 ```bash

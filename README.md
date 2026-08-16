@@ -44,24 +44,6 @@ The result: the agents aren't tools anymore. They're teammates who remember — 
 - **An eval loop** — `loop/` runs evals, regressions, and badcase drills, so you can watch the team get measurably better.
 - **Ships like a real product** — `build/build.sh` produces a globally-installable package; `team3 start` and you're live.
 
-## Layout
-
-```text
-team3_coding/
-├── README.md
-├── LICENSE
-├── draft/                # early-stage ideas & discussion notes
-└── team3/
-    ├── bin/              # team3 CLI entry
-    ├── build/            # packaging scripts
-    ├── cli/              # toolchain (init / write-action / experience …)
-    ├── daemon/           # the agent scheduler
-    ├── human_coding/     # Architect / Dev / UAT role prompts
-    ├── loop/             # evaluation tooling (eval / regression / badcase)
-    ├── spec/             # design docs & protocol definitions
-    └── web/              # Next.js web console
-```
-
 ## Quick start
 
 ```bash
